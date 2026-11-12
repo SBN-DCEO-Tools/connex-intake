@@ -140,6 +140,26 @@ html .cartbar{
   font-weight:800 !important;
   text-shadow:none !important;
 }
+
+/* ===== DESKTOP / WIDE SCREENS (>=900px) — use the width, phone layout untouched ===== */
+@media (min-width:900px){
+  body{max-width:1100px}
+  nav{max-width:1100px}
+  main{padding:24px 28px}
+  /* shop + ledger lists flow into responsive columns on wide screens */
+  #shopList, #ledgerList{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(360px, 1fr));
+    gap:10px;
+  }
+  #shopList .shoprow, #ledgerList .ledrow{ margin-bottom:0; }
+  /* cart list also uses two columns when roomy */
+  #cartList{ display:grid; grid-template-columns:repeat(auto-fill, minmax(360px,1fr)); gap:10px; }
+  #cartList .cartrow{ margin-bottom:0; }
+  /* subtle hover affordances for mouse users */
+  .shoprow .add:hover, .btn:hover, .filterbar button:hover{ filter:brightness(1.08); }
+  .results div:hover{ background:var(--surface2); }
+}
 </style>
 </head>
 <body>
