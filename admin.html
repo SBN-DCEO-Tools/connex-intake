@@ -1,0 +1,32 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connex Admin</title><style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#fff;background:#001b34}body{margin:0}header{background:#00274c;padding:20px 5%;border-bottom:3px solid #ffcb05}h1{margin:0;color:#ffcb05;font-size:1.6rem}main{max-width:850px;margin:30px auto;padding:0 18px}.panel{background:#073457;border:1px solid #345b7a;border-radius:14px;padding:22px;margin-bottom:20px}h2{margin:0 0 16px;font-size:1.2rem}input{display:block;box-sizing:border-box;width:100%;padding:12px;border-radius:7px;border:1px solid #9bb1c4;background:#fff;color:#111;margin:8px 0 14px;font-size:1rem}button{background:#ffcb05;color:#00274c;font-weight:750;border:0;border-radius:7px;padding:10px 16px;cursor:pointer;margin:3px}button.secondary{background:#b5c5d4}button.danger{background:#ffb2ad}button:disabled{opacity:.5;cursor:wait}.row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #345b7a;padding:14px 0;flex-wrap:wrap}.muted{color:#b6cadc;font-size:.85rem}.hidden{display:none!important}.notice{padding:12px 0;color:#ffcb05}a{color:#ffcb05}#error{color:#ffb2ad}</style></head><body><header><h1>〽 CONNEX ADMIN</h1><div>Employee Access Management</div></header><main>
+<section id="login" class="panel"><h2>Administrator sign in</h2><form id="loginForm"><label>Admin email<input type="email" id="email" required autocomplete="username"></label><label>Password<input type="password" id="password" required autocomplete="current-password"></label><button type="submit">Sign in</button></form><p class="muted">Your Firebase admin account is required to securely verify permissions. This browser remembers your session.</p></section>
+<section id="dashboard" class="hidden"><div class="panel"><div class="row" style="border:0;padding:0"><h2>Access dashboard</h2><button class="secondary" id="logout">Sign out</button></div><p class="muted">Approve individual browser identities. An alias is a label, not proof of identity.</p><p id="status" class="notice">Connecting…</p></div><div class="panel"><h2>Pending requests <span id="pendingCount"></span></h2><div id="pending"></div></div><div class="panel"><h2>Approved devices <span id="approvedCount"></span></h2><div id="active"></div></div></section><p id="error"></p></main>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script><script>
+var FIREBASE_CONFIG={
+  apiKey: "AIzaSyBSbPq4wucgAha9yyccI0rVF8y6Zzw97Mw",
+  authDomain: "budget-tracket-200b6.firebaseapp.com",
+  databaseURL: "https://budget-tracket-200b6-default-rtdb.firebaseio.com",
+  projectId: "budget-tracket-200b6",
+  storageBucket: "budget-tracket-200b6.firebasestorage.app",
+  messagingSenderId: "442984201568",
+  appId: "1:442984201568:web:8203ec4ffbf1a05b283205"
+};
+firebase.initializeApp(FIREBASE_CONFIG);var db=firebase.database(), auth=firebase.auth();
+var ADMIN_UID="qfRIS3TXGbeauUOdBvh363nfi1C2", requests={},approvals={},refs=[];
+function el(id){return document.getElementById(id)}
+function error(e){el("error").textContent=e&&e.message?e.message:String(e)}
+function clearRefs(){refs.forEach(function(r){r.off()});refs=[]}
+function node(tag,text,cls){var e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;return e}
+function render(){var pending=el("pending"),active=el("active");pending.replaceChildren();active.replaceChildren();var p=0,a=0;
+Object.keys(requests).sort().forEach(function(uid){var item=requests[uid]||{},isApproved=approvals[uid]===true;var row=node("div","","row"),info=node("div","");info.append(node("strong",item.alias||"(No alias)"),node("div",uid,"muted"));row.append(info);var buttons=node("div","");
+if(isApproved){a++;var revoke=node("button","Revoke","danger");revoke.onclick=function(){setApproval(uid,false)};buttons.append(revoke);active.append(row)}
+else{p++;var yes=node("button","Approve"),no=node("button","Deny","secondary");yes.onclick=function(){setApproval(uid,true)};no.onclick=function(){deny(uid)};buttons.append(yes,no);pending.append(row)}row.append(buttons)});
+el("pendingCount").textContent="("+p+")";el("approvedCount").textContent="("+a+")";if(!p)pending.append(node("p","No pending requests.","muted"));if(!a)active.append(node("p","No approved devices.","muted"));}
+function setApproval(uid,value){if(!confirm((value?"Approve":"Revoke")+" this device?"))return;db.ref("connexAccess/approved/"+uid).set(value).catch(error)}
+function deny(uid){if(!confirm("Deny and remove this request?"))return;db.ref("connexRequests/"+uid).remove().catch(error)}
+function start(){var r=db.ref("connexRequests"),a=db.ref("connexAccess/approved");refs=[r,a];r.on("value",function(s){requests=s.val()||{};render();el("status").textContent="Connected"},error);a.on("value",function(s){approvals=s.val()||{};render()},error)}
+auth.onAuthStateChanged(function(user){clearRefs();el("error").textContent="";if(!user){el("login").classList.remove("hidden");el("dashboard").classList.add("hidden");return;}if(user.uid!==ADMIN_UID){error("This account is not the designated Connex administrator.");auth.signOut();return;}db.ref("connexAdmins/"+user.uid).once("value").then(function(s){if(!s.val()){error("Administrator permission has not been registered in Firebase.");return;}el("login").classList.add("hidden");el("dashboard").classList.remove("hidden");start()}).catch(error)});
+el("loginForm").onsubmit=function(e){e.preventDefault();el("error").textContent="";auth.signInWithEmailAndPassword(el("email").value,el("password").value).then(function(){el("password").value=""}).catch(error)};
+el("logout").onclick=function(){auth.signOut().catch(error)};
+</script></body></html>

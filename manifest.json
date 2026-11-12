@@ -3,7 +3,7 @@
   "short_name": "Connex",
   "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#001b36",
   "theme_color": "#00274C",
   "icons": [
