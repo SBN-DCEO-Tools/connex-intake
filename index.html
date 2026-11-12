@@ -389,26 +389,34 @@ SS.set(deviceKey,deviceId);
 var pending=[];
 try{var savedPending=JSON.parse(SS.get(pendingKey)||"[]");if(Array.isArray(savedPending))pending=savedPending;}catch(e){}
 var stateRef=null;
-var approved=false, currentAuthUid="", approvalListener=null, requestListener=null;
+var approved=false, accessDenied=false, currentAuthUid="", approvalListener=null, requestListener=null;
 function accessGate(){
   var gate=$("accessGate");if(!gate)return;
   var locked=!approved;
   gate.classList.toggle("hidden",!locked || !employeeAlias);
   document.body.classList.toggle("alias-locked",locked || !employeeAlias);
   if(locked){$("accessMessage").textContent=!employeeAlias?"Enter your alias to request access.":
-    !currentAuthUid?"Connecting to Firebase…":"Approval requested for "+employeeAlias+". Waiting for administrator approval.";}
+    !currentAuthUid?"Connecting to Firebase…":accessDenied?"Access denied for this device. Contact your administrator.":"Approval requested for "+employeeAlias+". Waiting for administrator approval.";}
 }
+var requestInFlight=false, requestAttemptUid="";
 function submitAccessRequest(){
-  if(!currentAuthUid||!employeeAlias||approved)return;
-  var ref=firebase.database().ref("connexRequests/"+currentAuthUid);
+  if(!currentAuthUid||!employeeAlias||approved||accessDenied||requestInFlight)return;
+  if(requestAttemptUid===currentAuthUid)return;
+  requestAttemptUid=currentAuthUid;
+  requestInFlight=true;
+  var uidAtRequest=currentAuthUid;
+  var ref=firebase.database().ref("connexRequests/"+uidAtRequest);
   ref.transaction(function(existing){
-    if(existing && existing.alias===employeeAlias)return;
+    if(existing)return; // Never rewrite an existing request just because the alias changed.
     return {alias:employeeAlias,requestedAt:firebase.database.ServerValue.TIMESTAMP};
-  },function(err){if(err){syncError="Approval request: "+err.message;updateSync();}},false);
+  },function(err){
+    requestInFlight=false;
+    if(err){requestAttemptUid="";syncError="Approval request: "+err.message;updateSync();}
+  },false);
 }
-$("retryAccess").onclick=function(){submitAccessRequest();accessGate();};
+$("retryAccess").onclick=function(){requestAttemptUid="";submitAccessRequest();accessGate();};
 function updateApproval(){
-  var el=$("approvalStatus");if(el){el.textContent=approved?"Device approved":currentAuthUid?"Waiting for approval: "+employeeAlias:"Connecting to Firebase authentication…";el.style.display=approved?"none":"block";}
+  var el=$("approvalStatus");if(el){el.textContent=approved?"Device approved":currentAuthUid?(accessDenied?"Access denied: ":"Waiting for approval: ")+employeeAlias:"Connecting to Firebase authentication…";el.style.display=approved?"none":"block";}
   accessGate();
 }
 function validRow(r){
@@ -433,13 +441,15 @@ function initFirebase(){
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
     firebase.auth().onAuthStateChanged(function(user){
       if(approvalListener){approvalListener.off();approvalListener=null;}
-      if(!user){approved=false;cloudReady=false;currentAuthUid="";listeningCloud=false;updateApproval();firebase.auth().signInAnonymously().catch(function(e){syncError="Sign-in: "+e.message;updateSync();});return;}
+      if(!user){approved=false;accessDenied=false;requestAttemptUid="";cloudReady=false;currentAuthUid="";listeningCloud=false;updateApproval();firebase.auth().signInAnonymously().catch(function(e){syncError="Sign-in: "+e.message;updateSync();});return;}
       currentAuthUid=user.uid;
+      if(!user.isAnonymous){approved=false;accessDenied=false;cloudReady=false;syncError="Administrator session detected. Open admin.html in this browser, or sign out there and reload Connex.";updateApproval();updateSync();return;}
       fbRef=firebase.database().ref("connex");stateRef=fbRef.child("state");
       approvalListener=firebase.database().ref("connexAccess/approved/"+user.uid);
       approvalListener.on("value",function(snap){
         var wasApproved=approved;
         approved=snap.val()===true;
+        accessDenied=snap.val()===false;
         if(!approved){cloudReady=false;syncError="Awaiting admin approval";if(listeningCloud){stateRef.off("value");listeningCloud=false;}submitAccessRequest();}
         else{syncError="";if(!wasApproved)startCloudListener();flushPending();}
         updateApproval();updateSync();

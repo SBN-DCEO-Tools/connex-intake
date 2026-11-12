@@ -1,5 +1,5 @@
 // Connex Intake Console service worker
-const CACHE = 'connex-v5';
+const CACHE = 'connex-v6';
 const ASSETS = ['./','./index.html','./manifest.json'];
 
 self.addEventListener('install', e => {

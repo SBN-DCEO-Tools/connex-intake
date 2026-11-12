@@ -12,7 +12,7 @@ var FIREBASE_CONFIG={
   messagingSenderId: "442984201568",
   appId: "1:442984201568:web:8203ec4ffbf1a05b283205"
 };
-firebase.initializeApp(FIREBASE_CONFIG);var db=firebase.database(), auth=firebase.auth();
+var adminApp=firebase.initializeApp(FIREBASE_CONFIG,"connex-admin-isolated");var db=adminApp.database(), auth=adminApp.auth();
 var ADMIN_UID="qfRIS3TXGbeauUOdBvh363nfi1C2", requests={},approvals={},refs=[];
 function el(id){return document.getElementById(id)}
 function error(e){el("error").textContent=e&&e.message?e.message:String(e)}
@@ -21,10 +21,10 @@ function node(tag,text,cls){var e=document.createElement(tag);e.textContent=text
 function render(){var pending=el("pending"),active=el("active");pending.replaceChildren();active.replaceChildren();var p=0,a=0;
 Object.keys(requests).sort().forEach(function(uid){var item=requests[uid]||{},isApproved=approvals[uid]===true;var row=node("div","","row"),info=node("div","");info.append(node("strong",item.alias||"(No alias)"),node("div",uid,"muted"));row.append(info);var buttons=node("div","");
 if(isApproved){a++;var revoke=node("button","Revoke","danger");revoke.onclick=function(){setApproval(uid,false)};buttons.append(revoke);active.append(row)}
-else{p++;var yes=node("button","Approve"),no=node("button","Deny","secondary");yes.onclick=function(){setApproval(uid,true)};no.onclick=function(){deny(uid)};buttons.append(yes,no);pending.append(row)}row.append(buttons)});
+else{p++;var yes=node("button","Approve"),no=node("button",approvals[uid]===false?"Denied":"Deny","secondary");no.disabled=approvals[uid]===false;yes.onclick=function(){setApproval(uid,true)};no.onclick=function(){deny(uid)};buttons.append(yes,no);pending.append(row)}row.append(buttons)});
 el("pendingCount").textContent="("+p+")";el("approvedCount").textContent="("+a+")";if(!p)pending.append(node("p","No pending requests.","muted"));if(!a)active.append(node("p","No approved devices.","muted"));}
 function setApproval(uid,value){if(!confirm((value?"Approve":"Revoke")+" this device?"))return;db.ref("connexAccess/approved/"+uid).set(value).catch(error)}
-function deny(uid){if(!confirm("Deny and remove this request?"))return;db.ref("connexRequests/"+uid).remove().catch(error)}
+function deny(uid){if(!confirm("Deny access for this device?"))return;db.ref("connexAccess/approved/"+uid).set(false).catch(error)}
 function start(){var r=db.ref("connexRequests"),a=db.ref("connexAccess/approved");refs=[r,a];r.on("value",function(s){requests=s.val()||{};render();el("status").textContent="Connected"},error);a.on("value",function(s){approvals=s.val()||{};render()},error)}
 auth.onAuthStateChanged(function(user){clearRefs();el("error").textContent="";if(!user){el("login").classList.remove("hidden");el("dashboard").classList.add("hidden");return;}if(user.uid!==ADMIN_UID){error("This account is not the designated Connex administrator.");auth.signOut();return;}db.ref("connexAdmins/"+user.uid).once("value").then(function(s){if(!s.val()){error("Administrator permission has not been registered in Firebase.");return;}el("login").classList.add("hidden");el("dashboard").classList.remove("hidden");start()}).catch(error)});
 el("loginForm").onsubmit=function(e){e.preventDefault();el("error").textContent="";auth.signInWithEmailAndPassword(el("email").value,el("password").value).then(function(){el("password").value=""}).catch(error)};
