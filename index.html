@@ -141,14 +141,21 @@ html .cartbar{
   text-shadow:none !important;
 }
 
+/* Employee alias overlay */
+.alias-gate{position:fixed;inset:0;background:rgba(0,15,32,.96);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+.alias-panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;width:min(100%,440px)}
+.alias-panel h2{font-size:22px;color:var(--accent)}
+.alias-panel input{width:100%;padding:14px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:10px;font-size:16px}
+.alias-change{border:0;background:transparent;color:var(--accent);font-size:12px;cursor:pointer;padding:6px 0}
+body.alias-locked > :not(.alias-gate){visibility:hidden}
 /* ===== DESKTOP / WIDE SCREENS (>=900px): sidebar + multi-pane dashboard.
    Phone layout (below 900px) is completely untouched. ===== */
 .side-brand,.side-foot{display:none}  /* hidden on phone */
 
 @media (min-width:900px){
   body{
-    max-width:1280px; padding:0 0 0 0;
-    display:grid; grid-template-columns:220px 1fr; gap:0;
+    width:100%; max-width:none; margin:0; padding:0;
+    display:grid; grid-template-columns:220px minmax(0,1fr); gap:0;
     min-height:100vh;
   }
   /* header spans the top of the content area, not the sidebar */
@@ -198,10 +205,19 @@ html .cartbar{
 </style>
 </head>
 <body>
+<div id="aliasGate" class="alias-gate hidden" role="dialog" aria-modal="true" aria-labelledby="aliasTitle">
+  <form id="aliasForm" class="alias-panel">
+    <h2 id="aliasTitle">📦 Connex · Welcome</h2>
+    <label for="aliasInput">Enter alias</label>
+    <input id="aliasInput" type="text" maxlength="32" required autocomplete="nickname" placeholder="Your employee alias">
+    <button class="btn" type="submit">Continue to Connex</button>
+    <p class="hint">Your alias is saved on this device and attached to transactions. Aliases do not verify identity.</p>
+  </form>
+</div>
 <header>
   <div>
     <h1>📦 Connex Intake</h1>
-    <div class="sub" id="opLabel">Staging Console</div>
+    <div class="sub" id="opLabel">Staging Console</div><button id="aliasChange" class="alias-change" type="button" title="Change alias">Change alias</button>
   </div>
   
 </header>
@@ -358,30 +374,137 @@ var FIREBASE_CONFIG = {
   appId: "1:442984201568:web:8203ec4ffbf1a05b283205"
 };
 
-function initFirebase(){
-  if(typeof firebase === "undefined"){ return; }   // SDK blocked/not loaded
-  try{
-    firebase.initializeApp(FIREBASE_CONFIG);
-    fbRef = firebase.database().ref("connex");      // namespaced root node
-    FIREBASE_ENABLED = true;
-    /* Offline-first merge: only let remote overwrite local if it is NEWER. */
-    fbRef.on("value", function(snap){
-      var data = snap.val();
-      if(!data || !data.ledger){ return; }
-      var remoteMod = data.modified || 0;
-      var localMod  = getLocalModified();
-      if(remoteMod > localMod){
-        ledger = data.ledger;
-        saveLedger(true);                 // persist locally, do NOT re-push
-        SS.set(LS_MODIFIED, String(remoteMod));
-        renderBatch(); renderShop(); renderLedger();
-      }
-      updateSync();
-    });
-    updateSync();
-  }catch(e){ FIREBASE_ENABLED = false; }
+/* Shared state is committed atomically at connex/state. Legacy connex/ledger
+   is read only for one-time migration; never overwrite the old ledger. */
+var cloudReady=false, cloudOnline=false, syncBusy=false, syncError="", cloudStateMissing=false;
+var pendingKey="connex_pending_v2", aliasKey="connex_alias_v1";
+var deviceKey="connex_device_v1";
+var employeeAlias=SS.get(aliasKey)||"";
+var deviceId=SS.get(deviceKey)||uid();
+SS.set(deviceKey,deviceId);
+var pending=[];
+try{var savedPending=JSON.parse(SS.get(pendingKey)||"[]");if(Array.isArray(savedPending))pending=savedPending;}catch(e){}
+var stateRef=null;
+function validRow(r){
+  return r && typeof r.item==="string" && r.item.length>0 &&
+    (r.type==="in"||r.type==="out") && Number.isSafeInteger(r.qty) &&
+    r.qty>0 && BOXES.indexOf(Number(r.box))!==-1 && typeof r.id==="string";
 }
-
+function asMap(rows){
+  var m={}; (rows||[]).forEach(function(r){if(validRow(r))m[r.id]=r;});return m;
+}
+function mapRows(obj){return Object.keys(obj||{}).map(function(k){return obj[k];}).filter(validRow);}
+function refreshFromCloud(rows){
+  var combined=asMap(rows);
+  pending.forEach(function(r){combined[r.id]=r;});
+  ledger=mapRows(combined);
+  SS.set(LS_LEDGER,JSON.stringify(ledger));
+  renderBatch();renderShop();renderLedger();updateSync();
+}
+function initFirebase(){
+  if(typeof firebase==="undefined"){syncError="Firebase SDK unavailable";updateSync();return;}
+  try{
+    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
+    fbRef=firebase.database().ref("connex");
+    stateRef=fbRef.child("state");
+    FIREBASE_ENABLED=true;
+    firebase.database().ref(".info/connected").on("value",function(snap){
+      cloudOnline=snap.val()===true;
+      updateSync();
+      if(cloudOnline && cloudStateMissing)initializeCloudState();
+      if(cloudOnline)flushPending();
+    });
+    stateRef.on("value",function(snap){
+      cloudReady=true;
+      var state=snap.val();
+      cloudStateMissing=!state;
+      if(state && state.records)refreshFromCloud(mapRows(state.records));
+      else if(state)refreshFromCloud([]);
+      else if(!pending.length)refreshFromCloud([]);
+      if(!state && cloudOnline)initializeCloudState();
+      updateSync();
+      if(cloudOnline)flushPending();
+    },function(e){syncError=e.message||"Cloud read denied";updateSync();});
+  }catch(e){FIREBASE_ENABLED=false;syncError=e.message;updateSync();}
+}
+var initializingState=false;
+function initializeCloudState(){
+  if(initializingState||!stateRef)return;
+  initializingState=true;
+  /* Preserve the pre-upgrade shared ledger before creating the new state. */
+  fbRef.child("ledger").once("value").then(function(snapshot){
+    var legacy=snapshot.val();
+    var records=asMap(Array.isArray(legacy)?legacy:Object.values(legacy||{}));
+    return stateRef.transaction(function(current){
+      if(current!==null)return;
+      return {records:records};
+    },undefined,false);
+  }).then(function(){initializingState=false;})
+    .catch(function(e){initializingState=false;syncError="Migration: "+e.message;updateSync();});
+}
+function queueIntake(rows){
+  pending=pending.concat(rows);
+  SS.set(pendingKey,JSON.stringify(pending));
+  ledger=mapRows(asMap(ledger.concat(rows)));
+  SS.set(LS_LEDGER,JSON.stringify(ledger));
+  renderShop();renderLedger();updateSync();
+  flushPending();
+}
+function flushPending(){
+  if(syncBusy||!cloudOnline||!cloudReady||!stateRef||!pending.length)return;
+  syncBusy=true;updateSync();
+  var submitted=pending.slice();
+  var submittedIds=submitted.map(function(r){return r.id;});
+  stateRef.transaction(function(current){
+    current=current||{};
+    current.records=current.records||{};
+    submitted.forEach(function(r){if(!current.records[r.id])current.records[r.id]=r;});
+    return current;
+  },function(error,committed,snapshot){
+    syncBusy=false;
+    if(!error && committed){
+      pending=pending.filter(function(r){return submittedIds.indexOf(r.id)===-1;});
+      SS.set(pendingKey,JSON.stringify(pending));
+      syncError="";
+      refreshFromCloud(mapRows((snapshot.val()||{}).records));
+      if(pending.length)flushPending();
+    }else{syncError=error?error.message:"Sync not committed";updateSync();}
+  },false);
+}
+function commitOutflows(rows,onSuccess){
+  if(!cloudOnline||!cloudReady||!stateRef||syncBusy||pending.length){
+    toast("Cloud connection required for pulls; sync pending intake first");return;
+  }
+  syncBusy=true;updateSync();
+  var rejection="";
+  stateRef.transaction(function(current){
+    rejection="";
+    if(!current){rejection="Inventory not initialized";return;}
+    current.records=current.records||{};
+    var stock={};
+    mapRows(current.records).forEach(function(r){
+      var key=cartKey(r.item,r.box);
+      stock[key]=(stock[key]||0)+(r.type==="in"?r.qty:-r.qty);
+    });
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i],key=cartKey(r.item,r.box);
+      if((stock[key]||0)<r.qty){rejection="Insufficient stock: "+short(r.item,28);return;}
+      stock[key]-=r.qty;
+    }
+    rows.forEach(function(r){current.records[r.id]=r;});
+    return current;
+  },function(error,committed,snapshot){
+    syncBusy=false;
+    if(error||!committed){syncError=error?error.message:"";toast(rejection||syncError||"Pull not committed");updateSync();return;}
+    syncError="";
+    refreshFromCloud(mapRows((snapshot.val()||{}).records));
+    onSuccess();
+  },false);
+}
+function newRecord(type,item,qty,box,bldg,photo,ts){
+  return {id:uid()+"-"+deviceId,type:type,item:item,qty:qty,box:box,
+    bldg:bldg,photo:photo||null,ts:ts,alias:employeeAlias,deviceId:deviceId};
+}
 /* ---- state ---- */
 var ledger = loadLedger();      // array of {id,type:'in'|'out',item,qty,box,bldg,photo,ts}
 var cur = { item:null, qty:1, box:null, photo:null };
@@ -395,18 +518,7 @@ var LS_MODIFIED = "connex_modified_v1";
 function nowMs(){ return Date.now(); }
 function getLocalModified(){ try{ return parseInt(SS.get(LS_MODIFIED)||"0",10)||0; }catch(e){ return 0; } }
 
-function saveLedger(fromRemote){
-  /* local FIRST (immediate, offline-safe) */
-  SS.set(LS_LEDGER, JSON.stringify(ledger));
-  if(!fromRemote){
-    var ts = nowMs();
-    SS.set(LS_MODIFIED, String(ts));
-    /* cloud second (queued) — push the whole ledger + a modified stamp */
-    if(FIREBASE_ENABLED && fbRef){
-      try{ fbRef.set({ ledger: ledger, modified: ts }); }catch(e){}
-    }
-  }
-}
+function saveLedger(){ SS.set(LS_LEDGER,JSON.stringify(ledger));updateSync(); }
 
 /* ---------- helpers ---------- */
 function $(id){ return document.getElementById(id); }
@@ -466,6 +578,7 @@ function selectItem(it){
   $("selItemName").textContent=it;
   $("qtyVal").textContent="1";
   $("photoPreview").innerHTML="";
+  $("photoInput").value="";
   document.querySelectorAll("#boxPicker button").forEach(function(b){ b.classList.remove("sel"); });
   // suggest box where this item already lives
   var existing=onHand().find(function(x){ return x.item===it && x.qty>0; });
@@ -512,11 +625,12 @@ $("addNextBtn").onclick=function(){
   if(!cur.item || !cur.box) return;
   var b=$("bldgSel").value;
   if(!b){ toast("Pick a source building first"); return; }
-  batch.push({ item:cur.item, qty:cur.qty, box:cur.box, photo:cur.photo });
+  batch.push({ item:cur.item, qty:cur.qty, box:cur.box, photo:cur.photo, bldg:b });
   renderBatch();
   cur={item:null,qty:1,box:null,photo:null};
   $("itemDetail").classList.add("hidden");
   $("photoPreview").innerHTML="";
+  $("photoInput").value="";
   searchEl.focus();
   toast("Added — next item");
   refreshAddBtn();
@@ -543,13 +657,10 @@ $("finishBtn").onclick=function(){
   if(!b){ toast("Pick a source building first"); return; }
   if(!batch.length) return;
   var ts=Date.now();
-  batch.forEach(function(r){
-    ledger.push({ id:uid(), type:"in", item:r.item, qty:r.qty, box:r.box, bldg:b, photo:r.photo||null, ts:ts });
-  });
-  saveLedger();
-  toast("✓ Logged "+batch.length+" items from SBN"+b);
-  batch=[]; renderBatch();
-  renderShop(); renderLedger();
+  var rows=batch.map(function(r){return newRecord("in",r.item,r.qty,r.box,r.bldg,r.photo,ts);});
+  queueIntake(rows);
+  toast("Saved "+rows.length+" intake items"+(cloudOnline?" · syncing":" · pending sync"));
+  batch=[];renderBatch();renderShop();renderLedger();
 };
 
 /* ---------- SHOP view ---------- */
@@ -577,7 +688,7 @@ function renderShop(){
     var inCart = cart[k] ? cart[k].qty : 0;
     var d=document.createElement("div"); d.className="shoprow";
     var info=document.createElement("div"); info.style.flex="1"; info.style.paddingRight="8px";
-    info.innerHTML=short(x.item,46)+'<span class="pill">Box '+x.box+'</span>';
+    info.textContent=short(x.item,46)+' · Box '+x.box;
     var q=document.createElement("div"); q.className="q"; q.textContent=x.qty;
     var btn=document.createElement("button"); btn.className="add"+(inCart?" inCart":"");
     btn.textContent = inCart ? ("＋ ("+inCart+")") : "＋ Add";
@@ -614,7 +725,7 @@ function renderCart(){
     var k=cartKey(c.item,c.box);
     var row=document.createElement("div"); row.className="cartrow";
     var info=document.createElement("div"); info.style.flex="1";
-    info.innerHTML=short(c.item,34)+'<span class="pill">Box '+c.box+'</span><div class="hint">'+c.avail+' available</div>';
+    info.textContent=short(c.item,34)+' · Box '+c.box+' · '+c.avail+' available';
     var mini=document.createElement("div"); mini.className="mini";
     var minus=document.createElement("button"); minus.textContent="−";
     minus.onclick=function(){ cart[k].qty--; if(cart[k].qty<=0) delete cart[k]; renderCart(); renderShop(); };
@@ -635,17 +746,13 @@ function closeCart(){ $("cartScreen").classList.add("hidden"); $("shopList").cla
   $("shopFilter").classList.remove("hidden"); renderShop(); }
 
 function checkoutCart(){
-  var items=Object.values(cart).filter(function(c){ return c.qty>0; });
-  if(!items.length) return;
-  var ts=Date.now(); var total=0;
-  items.forEach(function(c){
-    ledger.push({ id:uid(), type:"out", item:c.item, qty:c.qty, box:c.box, bldg:"210", photo:null, ts:ts });
-    total+=c.qty;
+  var items=Object.values(cart).filter(function(c){return c.qty>0;});
+  if(!items.length)return;
+  var ts=Date.now(),total=items.reduce(function(n,c){return n+c.qty;},0);
+  var rows=items.map(function(c){return newRecord("out",c.item,c.qty,c.box,"210",null,ts);});
+  commitOutflows(rows,function(){
+    cart={};toast("✓ Checked out "+total+" items");closeCart();renderLedger();
   });
-  saveLedger();
-  cart={};
-  toast("✓ Checked out "+total+" items — logged as pulls");
-  closeCart(); renderLedger();
 }
 
 /* ---------- LEDGER + OUTFLOW ---------- */
@@ -666,7 +773,7 @@ function renderLedger(){
     var d=document.createElement("div"); d.className="ledrow";
     var when=new Date(r.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});
     d.innerHTML='<div style="flex:1;padding-right:8px">'+short(r.item,38)+
-      '<div class="hint">'+(r.type==="in"?("SBN"+r.bldg+" → "):"pull ← ")+'Box '+r.box+' · '+when+'</div></div>'+
+      '<div class="hint">'+(r.alias||'Legacy')+' · '+(r.type==="in"?("SBN"+r.bldg+" → "):"pull ← ")+'Box '+r.box+' · '+when+'</div></div>'+
       '<div style="text-align:right"><span class="tag '+r.type+'">'+(r.type==="in"?"+":"−")+r.qty+'</span></div>';
     wrap.appendChild(d);
   });
@@ -684,10 +791,9 @@ $("outflowBtn").onclick=function(){
   var q=parseInt(safePrompt("How many pulled? (max "+it.qty+")","1"),10);
   if(isNaN(q)||q<1){ toast("Cancelled"); return; }
   if(q>it.qty){ toast("Only "+it.qty+" available"); return; }
-  ledger.push({ id:uid(), type:"out", item:it.item, qty:q, box:it.box, bldg:"210", photo:null, ts:Date.now() });
-  saveLedger();
-  toast("➖ Logged pull of "+q);
-  renderShop(); renderLedger();
+  commitOutflows([newRecord("out",it.item,q,it.box,"210",null,Date.now())],function(){
+    toast("➖ Logged pull of "+q);renderShop();renderLedger();
+  });
 };
 
 /* ---------- nav ---------- */
@@ -717,12 +823,32 @@ document.querySelectorAll("nav button").forEach(function(b){
 
 /* ---------- sync status ---------- */
 function updateSync(){
-  var txt = FIREBASE_ENABLED
-    ? '<span class="on">\u25CF synced to cloud</span>'
-    : '<span class="off">\u25CF '+(SS.available?'local-only (offline-safe)':'preview (in-memory)')+'</span> \u2014 '+ledger.length+' records';
-  var el=$("syncStatus"); if(el) el.innerHTML=txt;
-  var sf=$("sideFoot"); if(sf) sf.innerHTML=txt+'<br>'+ledger.length+' records';
+  var label=syncError?"⚠ "+syncError:
+    syncBusy?"● syncing…":
+    pending.length?"● "+pending.length+" pending intake record(s)":
+    cloudOnline&&cloudReady?"● cloud connected":
+    "● offline / cloud unavailable";
+  var el=$("syncStatus");if(el)el.textContent=label+" · "+ledger.length+" records";
+  var sf=$("sideFoot");if(sf)sf.textContent=label;
 }
+function showAlias(){
+  document.body.classList.add("alias-locked");
+  $("aliasGate").classList.remove("hidden");
+  $("aliasInput").value=employeeAlias;
+  $("aliasInput").focus();
+}
+$("aliasForm").addEventListener("submit",function(e){
+  e.preventDefault();
+  var value=$("aliasInput").value.trim().replace(/\s+/g," ");
+  if(!value){toast("Enter an alias");return;}
+  employeeAlias=value.slice(0,32);SS.set(aliasKey,employeeAlias);
+  $("opLabel").textContent="Operator: "+employeeAlias;
+  $("aliasGate").classList.add("hidden");
+  document.body.classList.remove("alias-locked");
+});
+$("aliasChange").onclick=showAlias;
+if(employeeAlias)$("opLabel").textContent="Operator: "+employeeAlias;
+else showAlias();
 
 /* ---------- boot ---------- */
 renderBatch(); renderShop(); renderLedger(); updateSync();
