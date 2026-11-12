@@ -8,6 +8,7 @@
 <!-- Firebase compat SDK (loaded always; init gated to live host only) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <title>Connex Intake Console</title>
 <style>
 :root{
@@ -205,6 +206,7 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
 </style>
 </head>
 <body>
+<div id="approvalStatus" style="position:fixed;bottom:8px;right:8px;z-index:998;background:#00274c;color:#ffcb05;padding:10px;border-radius:8px;font-size:12px;max-width:95vw;overflow-wrap:anywhere">Connecting to Firebase authentication…</div>
 <div id="aliasGate" class="alias-gate hidden" role="dialog" aria-modal="true" aria-labelledby="aliasTitle">
   <form id="aliasForm" class="alias-panel">
     <h2 id="aliasTitle">📦 Connex · Welcome</h2>
@@ -367,7 +369,7 @@ var fbRef = null;
 var FIREBASE_CONFIG = {
   apiKey: "AIzaSyBSbPq4wucgAha9yyccI0rVF8y6Zzw97Mw",
   authDomain: "budget-tracket-200b6.firebaseapp.com",
-  databaseURL: "https://budget-tracket-200b6-default-rtdb.firebaseio.com/",
+  databaseURL: "https://budget-tracket-200b6-default-rtdb.firebaseio.com",
   projectId: "budget-tracket-200b6",
   storageBucket: "budget-tracket-200b6.firebasestorage.app",
   messagingSenderId: "442984201568",
@@ -376,7 +378,7 @@ var FIREBASE_CONFIG = {
 
 /* Shared state is committed atomically at connex/state. Legacy connex/ledger
    is read only for one-time migration; never overwrite the old ledger. */
-var cloudReady=false, cloudOnline=false, syncBusy=false, syncError="", cloudStateMissing=false;
+var cloudReady=false, cloudOnline=false, syncBusy=false, syncError="";
 var pendingKey="connex_pending_v2", aliasKey="connex_alias_v1";
 var deviceKey="connex_device_v1";
 var employeeAlias=SS.get(aliasKey)||"";
@@ -385,6 +387,12 @@ SS.set(deviceKey,deviceId);
 var pending=[];
 try{var savedPending=JSON.parse(SS.get(pendingKey)||"[]");if(Array.isArray(savedPending))pending=savedPending;}catch(e){}
 var stateRef=null;
+var approved=false, currentAuthUid="";
+function updateApproval(){
+  var el=$("approvalStatus");if(!el)return;
+  el.textContent=approved?"Device approved":currentAuthUid?"Device awaiting approval — ID: "+currentAuthUid:"Connecting to Firebase authentication…";
+  el.style.display=approved?"none":"block";
+}
 function validRow(r){
   return r && typeof r.item==="string" && r.item.length>0 &&
     (r.type==="in"||r.type==="out") && Number.isSafeInteger(r.qty) &&
@@ -405,19 +413,39 @@ function initFirebase(){
   if(typeof firebase==="undefined"){syncError="Firebase SDK unavailable";updateSync();return;}
   try{
     if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-    fbRef=firebase.database().ref("connex");
-    stateRef=fbRef.child("state");
+    firebase.auth().onAuthStateChanged(function(user){
+      if(!user){approved=false;cloudReady=false;updateApproval();return;}
+      currentAuthUid=user.uid;updateApproval();
+      fbRef=firebase.database().ref("connex");
+      stateRef=fbRef.child("state");
+      firebase.database().ref("connexAccess/approved/"+user.uid).on("value",function(snap){
+        var wasApproved=approved;
+        approved=snap.val()===true;
+        if(!approved){cloudReady=false;syncError="Device not approved";updateSync();}
+        else{
+          syncError="";
+          if(!wasApproved)startCloudListener();
+          flushPending();
+        }
+        updateApproval();
+      },function(e){syncError="Approval check: "+e.message;updateSync();});
+    });
+    firebase.auth().signInAnonymously().catch(function(e){syncError="Sign-in: "+e.message;updateSync();});
     FIREBASE_ENABLED=true;
     firebase.database().ref(".info/connected").on("value",function(snap){
       cloudOnline=snap.val()===true;
       updateSync();
-      if(cloudOnline && cloudStateMissing)initializeCloudState();
       if(cloudOnline)flushPending();
     });
+  }catch(e){FIREBASE_ENABLED=false;syncError=e.message;updateSync();}
+}
+var listeningCloud=false;
+function startCloudListener(){
+    if(listeningCloud||!approved)return;
+    listeningCloud=true;
     stateRef.on("value",function(snap){
       cloudReady=true;
       var state=snap.val();
-      cloudStateMissing=!state;
       if(state && state.records)refreshFromCloud(mapRows(state.records));
       else if(state)refreshFromCloud([]);
       else if(!pending.length)refreshFromCloud([]);
@@ -425,7 +453,6 @@ function initFirebase(){
       updateSync();
       if(cloudOnline)flushPending();
     },function(e){syncError=e.message||"Cloud read denied";updateSync();});
-  }catch(e){FIREBASE_ENABLED=false;syncError=e.message;updateSync();}
 }
 var initializingState=false;
 function initializeCloudState(){
@@ -451,7 +478,7 @@ function queueIntake(rows){
   flushPending();
 }
 function flushPending(){
-  if(syncBusy||!cloudOnline||!cloudReady||!stateRef||!pending.length)return;
+  if(syncBusy||!approved||!cloudOnline||!cloudReady||!stateRef||!pending.length)return;
   syncBusy=true;updateSync();
   var submitted=pending.slice();
   var submittedIds=submitted.map(function(r){return r.id;});
@@ -472,7 +499,7 @@ function flushPending(){
   },false);
 }
 function commitOutflows(rows,onSuccess){
-  if(!cloudOnline||!cloudReady||!stateRef||syncBusy||pending.length){
+  if(!approved||!cloudOnline||!cloudReady||!stateRef||syncBusy||pending.length){
     toast("Cloud connection required for pulls; sync pending intake first");return;
   }
   syncBusy=true;updateSync();
@@ -823,7 +850,7 @@ document.querySelectorAll("nav button").forEach(function(b){
 
 /* ---------- sync status ---------- */
 function updateSync(){
-  var label=syncError?"⚠ "+syncError:
+  var label=!approved&&currentAuthUid?"● awaiting device approval":syncError?"⚠ "+syncError:
     syncBusy?"● syncing…":
     pending.length?"● "+pending.length+" pending intake record(s)":
     cloudOnline&&cloudReady?"● cloud connected":
