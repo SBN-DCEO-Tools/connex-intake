@@ -1,6 +1,6 @@
 // Connex Intake Console service worker
 
-const CACHE = 'connex-v2';
+const CACHE = 'connex-v3';
 
 const ASSETS = ['./','./index.html','./manifest.json'];
 
