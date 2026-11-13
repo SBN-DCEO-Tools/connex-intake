@@ -9,7 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<title>Connex Intake Console</title>
+<title>Watt's in Stock</title>
 <style>
 :root{
   --bg:#001b36; --surface:#002a4e; --surface2:#013a68; --line:#124b7d;
@@ -66,6 +66,9 @@ nav .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var
 .results div{padding:14px;border-bottom:1px solid var(--line);font-size:14px;line-height:1.3;cursor:pointer}
 .results div:active{background:var(--surface2)}
 .results .muted{color:var(--muted);text-align:center;cursor:default}
+.results .quickadd{padding:14px;border-top:1px solid var(--line);font-size:14px;cursor:pointer;
+  color:#00274C;background:var(--accent);font-weight:800}
+.results .quickadd:active{filter:brightness(.95)}
 /* qty stepper */
 .stepper{display:flex;align-items:center;gap:14px;justify-content:center;margin:4px 0}
 .stepper button{width:56px;height:56px;border-radius:12px;border:1px solid var(--line);
@@ -125,6 +128,25 @@ h2{font-size:15px;margin:0 0 12px;color:var(--text)}
   color:#042f2e;padding:12px 20px;border-radius:24px;font-weight:700;z-index:50;font-size:14px;
   box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
 .toast.show{opacity:1}
+
+/* ===== ROOMS home view: building tiles ===== */
+.rooms-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px}
+.btile{background:var(--surface);border:2px solid var(--line);border-radius:var(--radius);
+  padding:20px 14px;cursor:pointer;text-align:center;min-height:104px;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.btile:active{transform:scale(.99)}
+.btile.primary{border-color:var(--accent)}
+.btile .bnum{font-size:30px;font-weight:800;color:var(--text);line-height:1;letter-spacing:.5px}
+.btile .bcount{font-size:12px;color:var(--muted);font-weight:600}
+.btile .bcount b{color:var(--accent);font-weight:800}
+/* room detail header */
+.roomhdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.roomhdr .back{width:44px;height:44px;min-width:44px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface2);color:var(--text);font-size:20px;cursor:pointer}
+.roomhdr h2{margin:0}
+.onhandrow{display:flex;justify-content:space-between;align-items:center;padding:12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;font-size:14px}
+.onhandrow .q{font-size:20px;font-weight:700;color:var(--accent);margin-left:8px}
 
 /* ===== GLOBAL HIGHLIGHT CONTRAST GUARD =====
    Any maize-highlighted control gets deep navy, heavy text. End-of-sheet +
@@ -209,31 +231,61 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
 <div id="approvalStatus" style="position:fixed;bottom:8px;right:8px;z-index:998;background:#00274c;color:#ffcb05;padding:10px;border-radius:8px;font-size:12px;max-width:95vw;overflow-wrap:anywhere">Connecting to Firebase authentication…</div>
 <div id="aliasGate" class="alias-gate hidden" role="dialog" aria-modal="true" aria-labelledby="aliasTitle">
   <form id="aliasForm" class="alias-panel">
-    <h2 id="aliasTitle">📦 Connex · Welcome</h2>
+    <h2 id="aliasTitle">📦 Watt's in Stock · Welcome</h2>
     <label for="aliasInput">Enter alias</label>
     <input id="aliasInput" type="text" maxlength="32" required autocomplete="nickname" placeholder="Your employee alias">
-    <button class="btn" type="submit">Continue to Connex</button>
+    <button class="btn" type="submit">Continue</button>
     <p class="hint">Your alias is saved on this device and attached to transactions. Aliases do not verify identity.</p>
   </form>
 </div>
-<div id="accessGate" class="alias-gate hidden" role="dialog" aria-modal="true"><div class="alias-panel"><h2>🔒 Connex Access</h2><p id="accessMessage">Checking access…</p><p class="hint">Your administrator will see your employee alias in the pending approvals list. Keep this browser's data to retain your approval.</p><button class="btn" type="button" id="retryAccess">Check again</button></div></div>
+<div id="accessGate" class="alias-gate hidden" role="dialog" aria-modal="true"><div class="alias-panel"><h2>🔒 Watt's in Stock Access</h2><p id="accessMessage">Checking access…</p><p class="hint">Your administrator will see your employee alias in the pending approvals list. Keep this browser's data to retain your approval.</p><button class="btn" type="button" id="retryAccess">Check again</button></div></div>
 <header>
   <div>
-    <h1>📦 Connex Intake</h1>
-    <div class="sub" id="opLabel">Staging Console</div><button id="aliasChange" class="alias-change" type="button" title="Change alias">Change alias</button>
+    <h1>📦 Watt's in Stock</h1>
+    <div class="sub" id="opLabel">Surplus Storage Tracker</div><button id="aliasChange" class="alias-change" type="button" title="Change alias">Change alias</button>
   </div>
   
 </header>
 
 <main>
-  <!-- ============ INTAKE ============ -->
-  <section id="view-intake">
+  <!-- ============ ROOMS (home / default) ============ -->
+  <section id="view-rooms">
+    <div id="roomGrid">
+      <div class="card">
+        <h2>🏢 Storage Rooms <span class="pill" id="roomsTotal">9 buildings</span></h2>
+        <div class="hint">Each building (SBN201–209) has one storage room under the stairs. Tap a building to view what's on hand and log new intake.</div>
+      </div>
+      <div class="rooms-grid" id="roomsGrid"></div>
+    </div>
+
+    <div id="roomDetail" class="hidden">
+      <div class="card">
+        <div class="roomhdr">
+          <button class="back" id="roomBack" type="button">◂</button>
+          <div>
+            <h2 id="roomTitle">SBN205 Storage</h2>
+            <div class="hint" id="roomSub">Under the stairs · by IW room · 0 items on hand</div>
+          </div>
+        </div>
+        <button class="btn" id="roomIntakeBtn" type="button">📥 Log Intake to this Room</button>
+      </div>
+      <div class="card">
+        <h2>On hand <span class="pill" id="roomCount">0</span></h2>
+        <div id="roomOnHand"><div class="empty">Nothing on hand in this room yet.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INTAKE (reached by tapping a room) ============ -->
+  <section id="view-intake" class="hidden">
     <div class="card">
-      <label>Source building (this batch)</label>
-      <select id="bldgSel">
-        <option value="">— select building —</option>
-      </select>
-      <div class="hint">Pick once; every item you add below is logged as coming from this building.</div>
+      <div class="roomhdr">
+        <button class="back" id="intakeBack" type="button">◂</button>
+        <div>
+          <h2 id="intakeTitle">Intake → SBN205</h2>
+          <div class="hint">Every item you add below is logged into this building's storage room.</div>
+        </div>
+      </div>
     </div>
 
     <div class="card" id="addCard">
@@ -255,10 +307,6 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
           <span class="qty" id="qtyVal">1</span>
           <button id="qtyPlus">+</button>
         </div>
-
-        <label>Stage into box</label>
-        <div class="boxes" id="boxPicker"></div>
-        <div class="hint" id="boxHint"></div>
 
         <label style="margin-top:14px">Photo (optional)</label>
         <input type="file" accept="image/*" capture="environment" id="photoInput" class="hidden">
@@ -282,12 +330,7 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
       <h2>🛒 Available to Shop <span class="pill" id="shopTotal">0 items</span></h2>
       <div class="hint">Read-only on-hand view for the 210 team. Only items with stock &gt; 0 are shown.</div>
     </div>
-    <div class="filterbar" id="shopFilter">
-      <button class="active" data-box="all">All boxes</button>
-      <button data-box="1">Box 1</button><button data-box="2">Box 2</button>
-      <button data-box="3">Box 3</button><button data-box="4">Box 4</button>
-      <button data-box="5">Box 5</button>
-    </div>
+    <div class="filterbar" id="shopFilter"></div>
     <div id="shopList"><div class="empty">Nothing staged yet.</div></div>
 
     <div id="cartScreen" class="hidden">
@@ -324,8 +367,8 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
 </main>
 
 <nav>
-  <div class="side-brand"><span class="sb-ic">📦</span><div><div class="sb-t">Connex</div><div class="sb-s">Staging Console</div></div></div>
-  <button class="active" data-view="intake"><span class="ic">📥</span>Intake</button>
+  <div class="side-brand"><span class="sb-ic">📦</span><div><div class="sb-t">Watt's in Stock</div><div class="sb-s">Surplus Storage</div></div></div>
+  <button class="active" data-view="rooms"><span class="ic">🏢</span>Rooms</button>
   <button data-view="shop"><span class="ic">🛒</span>Shop</button>
   <button data-view="admin"><span class="ic">📒</span>Ledger</button>
   <div class="side-foot" id="sideFoot"></div>
@@ -340,8 +383,35 @@ body.alias-locked > :not(.alias-gate){visibility:hidden}
    ============================================================ */
 var BOM_ITEMS = ["VEVOR Walk-Behind Hand Push Floor Sweeper, 25.6\" Sweeping Width Floor Sweeper Ma", "7 Drawers Rolling Tool Chest Cart ,24.2*12.9*29.9\"Tool Storage Cabinet With 4 Wh", "KNIPEX 00 11 07 Universal Control Cabinet Key-Pen Style", "Eagle 5 Gallon Type I Red Safety Gas Can for Gasoline with Flame Arrester, Self-", "SmartSign \"Danger - Gasoline\" Label | 7\" x 10\" Laminated Vinyl", "KNIPEX Tools 00 20 06 US1, Cobra Pliers 7, 10, and 12-Inch Set, 3-Piece", "E-Z Ancor 25 Qty Red Head EZ Ancor Zinc Metal Self Drilling Drywall Anchors with", "Durham 359-95 Gray Cold Rolled Steel 40 Opening Bin with Slope Self Design, 33-3", "TitanFlex Heavy Duty Black Nitrile Gloves, 6 Mil, Fully Textured, Mechanic Dispo", "Vibra-TITE Viz-Torque Tamper Detection Marker Orange (20211)", "Vibra-TITE Viz-Torque Tamper Detection Marker Green (20221)", "Vibra-TITE Viz-Torque Tamper Detection Marker Blue (20231)", "3M Polyurethane Sealant 540, Net 10.5 Fluid Ounce Cartridge, Black (Pack of12)", "Quantum QPRS-107BL Single-Sided Display Sloped Pick Rack Kit for Warehouse Retai", "BIZOEIRON Garage Metal Storage Cabinet with Pegboard, 71'' Tall Storage Cabinet", "HOMZ 4-Pack Durabilt Tote, Heavy Duty Plastic Storage Bins with Lids, 15 Gallon,", "RUST-OLEUM COld Galvanizing Compound, Grays Flat Silver , 16oz. - 7785-830", "NovelBee 1/2 Inch X 600 Feet Double Braid Nylon Anchor Line with Stainless Steel", "Mudder 7 Pcs Air Conditioning Refrigerant Compact Ball Valve 1/4 Inch for R410A", "Aquastrong 115V Shallow Well Garden Pump, Stainless Steel, 1320 GPH, Water Trans", "DEWALT Air Compressor Accessory Kit, 21 Pcs - Complete Air Compressor Starter Ki", "SPECILITE 5/8\" Hot/Cold Garden Water Hose 200 ft, -50℉-190℉,Flexible & Lightweig", "DEWALT Pancake Air Compressor, 6 Gallon, 165 PSI (DWFP55126)", "SumpMarine Water Transfer Pump, 115V 330 Gallon Per Hour - Portable Electric Pum", "BLENDLITE Garden Hose 15 ft x 3/4” Hot/Cold Heavy Duty Water Hose,-50°F to 190°F", "SPECILITE 3/4\" Hot/Cold Garden Water Hose 50 ft, -50℉-190℉,Flexible & Lightweigh", "DEWALT 50 X 1/4 BLEND HOSE FITTINGS", "AccuformNMC \"Eye WASH Station Inspection\" Pack of 25 PF-Cardstock Inspection Rec", "SmartSign \"Eye Wash\" Projecting Sign | 5\" x 6\" Acrylic", "Honeywell Fendall Pure Flow 1000 Eyewash Station, 7 Gallon Capacity, 15 Minutes", "Complete Forklift Battery Protective Handling PPE Kit", "SpillTech Hazmat Overpack Salvage Drum Battery Acid Spill Kit, 20 Gallon, 60 Pie", "Honeywell 2 Piece Saline Cartridge Set, for Fendall Pure Flow 1000 Emergency Eye", "Rubbermaid Commercial Products BRUTE Heavy-Duty Round Trash/Garbage Lid, 55-Gall", "Haus & Garten Heavy-Duty 3/4\" Brass Garden Hose Shut Off Valve - Garden Hose Con", "PIG Roof Leak Diverter Tarp - 10' x 10' - Gray - TLS464-GY", "ATERET 7/8 inch by 600 feet Twisted Poly Dacron Rope I 3-Strand w/Polyolefin Cor", "Rubbermaid Commercial Products BRUTE Dolly Black Fits 20 gallon, 32 gallon, 44 g", "10' x 12' Clear Vinyl Tarp - Super Heavy Duty 20 Mil Transparent Waterproof PVC", "Clear Tarp Heavy Duty Waterproof, 15x20 FT Transparent Vinyl Tarpaulin with Grom", "Little Giant #1 115 Volt, 1/150 HP, 205 GPH Direct Drive Small Submersible Fount", "Swan Products SNFR58100 Farm & Ranch Durable Heavy Duty Water Hose with Crush Pr", "Nabob Wipers Auto Mechanic Shop Towels 25 Pack Bulk Shop Rags 100% Cotton Size 1", "Tarps Now 15x15 ft Leak Diverter Tarp & Roof Rain Diverter – 12 Mil Reinforced P", "Tarps Now 20x20 ft Leak Diverter Tarp & Roof Rain Diverter – 12 Mil Reinforced P", "Clear tarps Heavy Duty Waterproof, Transparent Tarp Tarpaulin with Eyelets, 0.16", "Rubbermaid Commercial Products BRUTE 55G Gray Vented Trash Container, for Landsc", "BLENDLITE Garden Hose 100ft x 3/4” Hot Water Hose, Heavy Duty -50°F to 190°F,Bur", "Farm Plastic Supply - Clear Plastic Sheeting - 10 mil - (10' x 100') – Clear Pla", "Scotts Turf Builder EdgeGuard DLX Broadcast Spreader - Spreader for Lawn Fertili", "24\" Squeegee W Handle", "Premium Ice Melt, Blue (50 lb Bag) – Fast-Acting, Industrial-Grade Snow Melter f", "Avery Self-Adhesive Wall and Door Communication Display Protectors, 10 Clear Sle", "Simple Houseware Single Pocket Wall Mount for Hanging File Holder, 3 Packs, Whit", "Ring Binder Depot SDS Binder, Heavy Duty 3 Ring Binder with 1.5 in Capacity Hold", "NiOffice Clear Acrylic Magnetic Dry Erase Marker Holder for Whiteboard Fridge Lo", "Performore Safety Data Sheets Binder Display Rack, SDS/MSDS Display Holder Wire-", "Mr. Pen- Dry Erase Markers, 12 Pack, Assorted Colors, Fine Tip, Dry Erase Whiteb", "First Aid Only 223-U OSHA-Compliant First Aid Kit, All-Purpose 25-Person Emergen", "Pyle 30W Megaphone Bullhorn with Built-in Siren, LED Lights, Adjustable Volume C", "ASIN: B0BNL5MBMY", "First Aid Only 6021 21-Piece Body Fluid Clean Up Kit, Commercial Cleaning Equipm", "Rayovac C Batteries, C Cell Battery, 12 Count", "Ready America 72 Hour Deluxe Emergency Kit, 2-Person 3-Day Backpack, First Aid K", "3 Pack Rechargeable LED Flashlights High Lumens, 90,000LM Super Bright Flashligh", "Avery Standard 3 Ring Binder, 1\" Round Rings, 175-Sheet Capacity, 1.4 Inch Wide", "C-Line Peel and Stick Display Pockets, Clear, 8.5 x 11 Inches, 10 per Pack (3691", "Klein Tools D5072 Adjustable Wrench Set, Extra Capacity, 6-Inch and 10-Inch, For", "Guard Dog Security Air Horn for Safety, Loud Blow Horn, Hand Held Mini Air Horn,", "Howard Leight by Honeywell Leight Source 500 Earplug Dispenser (LS-500), blue", "HOWARD LEIGHT Honeywell Home by Laser Lite High Visibility Disposable Foam Earpl", "PhysiciansCare Wall-Mountable Eyewash Station with 2 Bottles of Eye Wash Solutio", "Bitlyle Rechargeable LED Flashlights High Lumen,99,000 Lumens Super Bright Flash", "Gorilla Original Gorilla Glue, Brown, Waterproof Polyurethane Glue, 8 Ounce (Pac", "Uni Posca Medium Marker, Red (PC5M.15)", "uni Posca Medium Marker, Green (PC5M.6), 1 Count (Pack of 1)", "uni POSCA PC-5M Water-Based Paint Markers, Reversible Medium Tip (1.8-2.5mm), Ye", "Uni Posca 8-Tip Acrylic Paint Marker Set, Black, Non-Toxic, ACMI Certified, Allo", "True Temper 1627200 Poly Snow Shovel/Pusher with Steel Handle and D-Grip", "Loctite 1329467 243 Blue Medium Strength Threadlockers, 1.69 Ounces, 50 mL, 3/4\"", "Milwaukee 49-22-4095 10-pc Electricians Hole Dozer Hole Saw Kit", "Wiha 26197 Precision Screwdriver Set, 7-Piece Mini Slotted & Phillips, PicoFinis", "Milwaukee 48-20-7499 SDS-Plus 4Ct Mx4 Kit (6-Piece)", "Milwaukee 49-66-4702 Shockwave 1-7/8-Inch Mag Nutdriver 1/4-Inch, 10 Pack", "Milwaukee 49-66-4703 Shockwave 1-7/8-Inch Mag Nutdriver 5/16-Inch, 10 Pack", "MasterVision Magnetic Adhesive Roll Tape,1\" H, L FM2021-1 Each", "HKS 400 PCS Blue Wire Caps - AWG 22-14,Twist-On Screw Nuts Insulated Insertion E", "Panduit PV6-14RX-T #6/AWG 1/4\" RING EXPANDED INSULATION VINYL TERMINAL (package", "Scotch Double Sided Tape for Crafts, Scrapbooking, Teacher School Supplies, Arts", "3\" x 60 yds. 3M Aluminum Foil Tape 425", "HKS 100 PCS Brown(Tan) Wire Nuts - AWG 22-8 Winged Electrical Wire End Connector", "Tandefio 100 Pcs Green Ground Screws for Electrical Box, 10-32 x 3/8 Inch Hex He", "WD-40 WDF490026 - Smart Straw Spray Lubricant", "CONFAST 3/8\" x 2-3/4\" Wedge Anchor Zinc Plated (Box of 50)", "Kable Kontrol Made in USA Cable Zip Ties, 100 Pcs 7 Inch Black, 50 Lbs Tensile S", "TradeGear Black 10 Pack - UL Listed Colored Electrical Tape, 60 ft x 3/4 in, 600", "RED WOLF White Electrical Tape 3/4 in x 66ft 3 Pack, Industrial Grade UL/CSA Lis", "Lichamp 10-Pack Yellow Electrical Tape Waterproof, 3/4 in x 66ft, Industrial Gra", "First Aid Only 5250 Heat Stress Kit, OSHA-Compliant First Aid Kit for Heat Exhau", "Akro-Mils 30250 AkroBins Plastic Storage Bins, Space-Saving Stackable Bins for G", "Hudson Exchange 15\" x 8\" x 7\" (6 Pack) Plastic Stackable Storage Bin and Hanging", "HomeStock Vertical Condiment Organizer, 3 Shelves, 9 Compartments, Black Finish,", "JOLLWEI Large Paper Bowls, 40oz Compostable Bowls, 120 Pack Heavy Duty Disposabl", "Dealusy 360 Count Extra Heavy Duty Clear Plastic Silverware, 150 Forks, 150 Spoo", "Domino® Granulated Sugar, 20 oz Canister, Sugar Container (Pack of 3)", "Dixie Large Paper Plates, 10 Inch, 204 Count, 2X Stronger*, Microwave-Safe, Soak", "Mind Reader Cup and Condiment Station, Breakroom Countertop Organizer, 3-Tier St", "Besilord Bamboo Silverware Holder - Drawer Organizer with 5 Slots (Black)", "Zevo Flying Insect Trap & 3 Refill Cartridges - Plug in Fly Trap & Indoor Bug Ca", "Roter Mond Toaster 4 Slice Retro Stainless Steel with Extra Wide Slots Bagel, De", "Paper Towel Holder Countertop, Standing Paper Roll Holder with Anti Slip Weighte", "DuraSteel Heavy Duty Wall Mount Shelf - 36\" Wide x 14\" Deep Classic Stainless St", "GUSTO Clear Plastic Cups [12 oz - 240 Count] Disposable Cold Drinking Cups for P", "International Delight Caramel Macchiato Creamer - 2 Pack of 192 per case., 84 Fl", "Kitchen Utensil Set-Silicone Cooking Utensils-33 Kitchen Gadgets & Spoons for No", "Indiana 2026 Labor Law Poster – State & Federal Compliance – OSHA, EEOC, FMLA, M", "Rubbermaid Commercial Stable Multi-Lingual Safety Sign, 13w x 13 1/4d x 26h", "Nestle Coffee mate Creamer Singles Variety Pack, Original, Hazelnut, Italian Swe", "TOSHIBA EM131A5C-BS Countertop Microwave Ovens 1.2 Cu Ft, 12.4\" Removable Turnta", "Wood Coffee Stirrers Stir Sticks - 1,000 Biodegradable Disposable Wooden Beverag", "Simply Bio 50-55 Gallon Compostable Trash Bags Liners Flat-Top, Heavy Duty Extra", "International Delight, French Vanilla, Single-Serve Coffee Creamers, 192 Count (", "Lichamp 10-Pack Orange Electrical Tape Waterproof, 3/4 in x 66ft, Industrial Gra", "Tri-Flow Synthetic Food Grade Grease, N.L.G.I. Grade 2, Gun Cartridge - Lot of 1", "Southwire W-12 Jack Chain-PLTD 100' / Roll", "Diversitech T-417 Super comb Tools, 16/17\", Lime", "Wilton B.A.S.H 30\" Sledge Hammer, 20 Lb Head (22030)", "Milwaukee Electric Tool 48-22-9316 Smooth Poly Fiberglass Hammer, 19oz", "Titan 63032 2lb Dead Blow Hammer with Steel Shot Filled Head, Spark & Rebound Re", "4 Pound Hard Face Sledge Hammer, 50-55 HRC, 16-Inch Fiberglass Handle, Overstrik", "MOLLIFII Adjustable Operating Wrench, 60 to 108 in, Mfr: 31MJ70-A", "3M Manual Applicator 310M, 1/case (for Sealant Cartridges)", "T&T Tools Original Manhole Hook Tool - 36-Inch Single Hook Made with Durable Hex", "LockNLube Mini Grease Gun Kit. Includes Our Patented Grease Coupler (Locks on, S", "Tsurumi Pump HS2.4S Submersible Trash Pump with Agitator 1/2 HP 115V 2 in Discha", "Wilton Utility Bench Vise, 4-1/2\" Jaw Width, 4\" Jaw Opening, 2-5/8\" Throat (Mode", "Milwaukee 5376-20 1/2\" (13 Mm) Hammer Drill, Red", "2821-20 For Milwaukee tool M18 Gen 2 FUEL Cordless Reciprocating Saw, Bare Tool", "Milwaukee 2626-20 M18 18V Lithium Ion Cordless 18,000 OPM Orbiting Multi Tool wi", "Cordless Drill/Driver, Bare, 18.0V, 1/2in. Model 2606-20", "Milwaukee 2730-20 M18 Fuel 6 1/2\" Circular Saw , Brushless (Tool Only)", "Milwaukee 6268-21 6.5 Amp Top Handle Jig Saw", "Milwaukee M18 FUEL D-HANDLE JIG SAW BARE TOOL", "Milwaukee Electric Tool Milwaukee 2688-20 Cordless Heat Gun", "Fluke 971 Temperature Humidity Meter", "Simply Bio 13 Gallon Compostable Trash Bags Liners Drawstring, Heavy Duty Extra", "Scott Paper Towels, Choose-A-Sheet, 30 Double Rolls = 60 Regular Rolls (108 Shee", "iwoly C150 Cordless Vacuum Cleaner with 2200mAh Rechargeable Battery, 18000Pa Cy", "Reli. 6-10 Gallon Trash Bags | 1000 Bags | Clear | Bathroom | Strong | Garbage", "STWWO Trash Bag Holder, Metal Trash Bag Dispenser Roll Holder, Kitchen Trash Bag", "WEBSTORE SUPPLY 35 Gallon Trash Can, Black Square Commercial Plastic Garbage Can", "Yocada 24 inch Push Broom Brush 65.3 inch Long Handle Stiff Bristles Heavy-Duty", "Tidy Tools Commercial Dust Mop – 36 Inch Floor Sweeper for Hardwood, Reusable Co", "KLEEN HANDLER 3 Pack of 36 Inch Microfiber Dust Mop, Large Washable Commercial M", "Kefanta 3 Pack Outdoor Broom Heavy-Duty Indoor Commercial Brooms 54 Inches for C", "CLEANHOME 36\" Commercial Dust Mops for Floor Cleaning Heavy Duty Floor Duster Mo", "RIDGID - 23743 High Efficiency, Dry Pickup Dust Bags for 12 - 16 Gallon Wet / Dr", "Rubbermaid FG253100BLA Lobby Pro Upright Dust Pan, Case of 6", "Scott Shop Original Blue Towels (75190), 9\"x12\" Cloth-like Paper Towel (8 Boxes", "American Select Tubing 60\" Black Powder Coated Steel Broom Handle with Threaded", "Highmark™ High-Density Can Liners, 14 Mic, 60 Gallons, 38\" x 60\", Natural, Box O", "Highbar Select Clear Trash Bags,40-45 Gallon Trash Bags, 40\" x 48\", 250 Count, 1", "YITAHOME Metal Expandable Barricade Gate Outdoor, 16FT Folding Security Gate, Re", "Howard Leight Laser Lite Hi-Visibility Earplug Refill for HL400 Dispenser, 200 P", "Bepatio 8000LBS Heavy Duty Garage Shelving,77\" W Industrial Storage Shelves,4 Ti", "4Pack Acrylic Half Dome Mirror Corner Mirror Blindspot for Wall 12'' Diameter Sa", "Vikan 40123 4\" Handle Mounted Nylon Scraper, Blue", "Vestil TPA-10 Steel Economy Floor Tape Applicator, 6\"-1/2\" Maximum Roll Diameter", "Vacmaster 16-Gallon 6.5 Peak HP† Wet/Dry Vacuum – VJH1612PF 1101, Red", "DURATECH Magnetic Tape Measure 25FT with Fractions 1/8, Retractable Measuring Ta", "48-32-4010 Milwaukee Shockwave Impact Duty Driver Bit Set 54Pc", "2004HZL Milwaukee Intrinsically Safe C I, II, III / D 1 Spot/Flood Headlamp | Sa", "Comfylichi 2pcs 4 Way Sillcock Key Set 1/4\", 9/32\", 5/16\", 11/32 Steel Sillcock", "Klein Tools 11057 Wire Cutter/Stripper, Made in USA, Heavy Duty Cutter for 20-30", "Klein Tools 32561 Multi-Bit Screwdriver/Nut Driver, 6-in-1 Stubby Screwdriver wi", "ORIGINAL TAMPERPROOF 15-IN-1 MULTI-BIT SCREWDRIVER", "KNIPEX 72 01 140 Diagonal Flush Cutters", "Amazon Basics 1/4-Inch Drive Click Torque Wrench, 35-200 in.-lb/3.95-22.5 Nm, Ad", "GEARWRENCH 13 Pc. 12 Pt. Reversible Ratcheting Combination Wrench Set, SAE - 950", "Zebra DS4608-SR7U2100SGW Barcode Scanner, 1D/2D Imager, General Purpose, USB, Ha", "Fluke 117 Digital Multimeter, Non-Contact AC Voltage Detection, Measures Resista", "Fluke 59 Max+ Infrared Thermometer, Yellow, 59 max Plus, 10:1 DTS Ratio, FLUKE-5", "Milwaukee 2557-20 M12 Fuel 3/8\" Ratchet (Bare Tool)", "Racatac Kneeling Sitting Creeper with 3 Inch Casters, Rolling Knee Pads with Sea", "Milwaukee 0880-20 18V Cordless Lithium-Ion 2 Gallon Wet/Dry Vacuum (Bare Tool)", "BYOGI Fits Milwaukee 48-22-8201 Ultimate Jobsite Backpack, Red, Black", "FastCap 02175 Kaizen Foam Hot Knife", "Fastcap Kaizen Foam 20Mm (7/8\") Black", "Aoasur 6packs 6.0Ah Replacement Battery Compatible with Milwaukee M -18 18v 6000", "Wiha 28792 Insulated Torque Control Driver & SlimLine Blade Set, 16 Piece, 18–62", "Ecoangel USB Rechargeable LED Road Flares Emergency Lights-Roadside Warning Car", "KOTVTM SB-5 Carbide Burr Set Tungsten Die Grinder Bits (1/2\" Head Dia X 1\" Cutte", "ZEONHAK 8 Pack 3 Inches Magnetic Bowls, Round Magnet Trays, Stainless Steel Magn", "Klein Tools D275-5 Diagonal Flush Cutters, Made in USA, Micro Wire and Compact Z", "2PC Designated Smoking Area Sign, 14 x 10 Inches - Aluminum", "EZ on the Earth - Dry Cell Battery Recycling Container – 1 Gallon, Battery Dispo", "Please Do Not Flush Sign 10 Pack 6\"x 6\" Please Do Not Flush Anything Except Toil", "Yocada 18 Inch Push Broom Heavy-Duty Outdoor Commercial Broom Brush Stiff Bristl", "LOVIMAG Strong Magnetic Hooks, 12 Pack Magnetic Hooks Heavy Duty 70LBS Strong Ne", "Amazon Basics Hanging File Folders for Documents, Letter Size, 1/5-Cut Adjustabl", "VNIMTI Aluminum Snow Shovel with D Handle Metal Snow Shovel for Driveway 45Inche", "Firbon 12\" Guillotine Paper Cutter, Heavy Duty 12-Sheet Capacity Trimmer for Car", "McKesson Alcohol Prep Pads, (4,000 Count) - Sterile, Individually Wrapped Wipes,", "NACENA Broom and Dustpan Set, 52-in Long Adjustable Handle Broom Dustpan Combo w", "OFFILICIOUS Ruled Index Cards 3x5 — Durable Blank Cards Bulk for Writing Recipes", "Amazon Basics 48-Pack AA Alkaline High-Performance Batteries, 1.5 Volt, 10-Year", "Amazon Basics AAA Long-Lasting Alkaline Batteries, 36-Count, 1.5 Volt, Reliable", "Ontel Battery Daddy Storage & Organizer Case w/Tester, Stores & Protects Up to 1", "Swingline Staples, Heavy Duty for Desktop Staplers, 3/4\" Length, 100/Strip, 1000", "No Smoking Sign, 6 Pack No Smoking Signs for Business/Home,10 x 7 Inches Reflect", "SDSNTE Steel Cigarette Butt Receptacle Disposal Outdoor for Keeping a Fresh and", "Amazon Basics Multipurpose Copy Printer Paper, 8.5 x 11 Inches, 24 lb Weight, 97", "Simple Houseware Clear Single Pocket Wall Mount for Hanging File Holder, 3 Packs", "Firbon A4 Paper Cutter 12 Inch Titanium Paper Trimmer Scrapbooking Tool with Aut", "Avery Write & Erase Dividers for 3 Ring Binders, 8 Tabs per Set, Multicolor Big", "1/2” x 150’ (0.5inch, 150 feet Long) Hook and Loop Tape Strap SKIRLLBOT, Double-", "Capri Tools 18 mm x 19 mm Super-Thin Open End Wrench, Metric (11850-1819)", "VANTRONIK Fuse Puller Tool for Large and Medium Cylindrical Fuse Cartridge Fuse", "Oberon Arc Flash Face Shield - 12 Cal - Hard Cap and Face Shield Kit - TCG Serie", "Little Giant Ladders, Sure Step, 3-Step, Double-Sided Step Stool, Fiberglass, (1", "Little Giant Ladders, MightyLite 2.0, 4' Stepladder with Ground Cue, Fiberglass,", "Little Giant Ladders, MightyLite 2.0, 8' Stepladder with Ground Cue, Fiberglass,", "Little Giant Ladders, MightyLite 2.0, 6' Stepladder with Ground Cue, Fiberglass,", "Wiha 28398 19 Piece Insulated SoftFinish Slimline Blade Set", "Steel Panel Truck Cart, Platform Truck, Heavy Duty Lumber Drywall Dolly, Flatbed", "Wiha 28502 TorqueVario-S Torque Screwdriver, 5-10 Inch Pound", "Wiha 79443 X-Selector Bit Set With Slotted, Phillips, Torx Bits and Quick Releas", "100 PCS Steel Security Cable Seals Numbered Tamper Proof Security Tags, Red Pull", "Vestil PLB/S-5 Steel Pry Lever Bar 5 Ft. Height 5,000 Lb. Capacity Blue", "120 pcs Tamper Evident Label Sticker with Bar Code Security Warranty Void Seals", "Milwaukee Electric Tools M18 High Output HD12.0 Battery Pack", "Milwaukee 10 Pack - 4 1 2 Cutting Wheels For Grinders - Aggressive Cutting For M", "Telescopic LED Inspection Mirror with Magnifier - Perfect for Mechanics and Vehi", "SNAP-LOC 2 x 7 Inch Snap-Loc Dolly Connector 2-Pack, E-Track Tie-Down Strap 4,40", "Greenlee KA4-6 DIE SET, 6 AL CRIMP (KA4-6) , Gray", "DEWALT Drill Bit Set, 21 Pc. Titanium Nitride Coated Pilot Point DEWALT Bit Set", "Craftsman CMHT82345 48IN I-Beam Level", "Ergodyne 5300 A-Frame Ladder Shoulder Lifting Strap & Carrying Handle, Transport", "Reed Tool VK2CK2 Main Valve Key with 2-Inch Curb Key", "WARN 885005 PullzAll Cordless 24V DC Portable Electric Winch with Steel Cable an", "Milwaukee Electric Tool 6142-31 Milwaukee 4-1/2 11 Amp Small Angle Grinder Paddl", "IPG PG29 Delicate Surface Masking Tape, 1.41\" x 60 yd, (6-Pack)", "3M 7000 Series Full Facemask Lens Covers 7899 Compatible 25 Pack", "3 Panels Safety Barricade 5.8FT Foldable Security Sign Barrier Gate with Heavy D", "Wiha 21103 Switch Cabinet Key", "Heavy Duty Plastic Seals Tamper Truck Trailer Seals Numbered Security Tags Conta", "Mayday Emergency Water Pounches Case of 100. Emergency Preparedness, Survival an", "Go2Kits Ultimate Travel Toiletry & PPE Kits, Hygiene Kit with Shaving Supplies &", "ReadyWise Emergency Food Supply - 72 Hour Survival Kit, 30 Servings of Protein M", "SmartSign - T1-1071-HI_12x18 No Parking Sign By | 12\" x 18\" 3M High Intensity Gr", "Ice Cleats, Crampons Snow Traction Ice Cleats for Shoes and Boots Women Men, Non", "HexArmor Seamless A6-Level Cut-Resistant Durable Long Lasting Puncture Resistant", "DuPont Tychem 2000 QC127S Disposable Chemical Resistant Coverall with Hood, Elas", "Buself Heavy Duty Disposable Shoe Covers, Extra Large 6.7x17.7 In, Thick 0.3 Oz,", "3M Safety Glasses, Virtua, 20 Pair, ANSI Z87, Unisex, Anti-Fog, Scratch Resistan", "Ansell AlphaTec Solvex 37-185 Chemical-Resistant Nitrile Gloves for Cleaning, Au", "Ansell 37-185-8 Sol-Vex Unsupported Nitrile Gloves, Cuff, Lined, Size 8, Green (", "Sol-Vex Ansell 37-185/9 Nitrile Green Large Gloves - Pair", "3M Safety 7800S-M 7800S Series Silicone Full Facepiece Respiratory Protection, M", "3M Large 7000 Series Full Face Air Purifying Respirator", "Watersay 6 Sets 3 Ring Binder Numbered Dividers with Tabs 1-31 Tab Month Divider", "Avery Standard View 3 Ring Binder, 0.5\" Round Rings, 100-Sheet Capacity, 0.7 Inc", "Avery Big Tab Write & Erase Durable Plastic Dividers for 3 Ring Binders, 8-Tab S", "BIC Round Stic Grip Xtra Comfort Black Ballpoint Pens, Medium Point (1.2mm), 36-", "LIBMAN 954.0 Soft Rubber Floor Squeegee, 36\" Curved Blade", "OFO 36inch Industrial Commercial Dust Mop 2 Sets //Heavy Duty Dust Mop // 63inch", "Sharpie Creative Markers, Combo Pack, Water-Based Acrylic, Bullet & Brush Tips,", "Amazon Basics 3 Ring Binders, 2 Inch, D-Ring Organizer for School, Home Office,", "YYILIS Magnetic Remote Control Holder Wall Mount, 4 Pack TV Remote Control Holde", "AurDo 300Pcs Double Sided Tape Heavy Duty Square Mounting Foam Tape,27 × 27mm/1.", "CCW Series WMB-230 Magnetic Wall Mount Retractable Belt Barrier (30 Foot Belt, R", "deegtran Pens Bulk, 100 Pack No Bleed Black Ink Click Pens with Soft Grip, Whole", "UNNI Compostable Drawstring Bags, 13 Gallon, 49.2 Liter, 30 Count, Heavy Duty 1", "3M One Touch Pro 391-0000 Blue Earplug Dispenser", "Stardust Spill Products D715 Quick Response II Spill Kit Includes Yellow Duffle,", "Mr. Pen- Wire Cutter Bulk, 6\", 5 Pack, Wire Cutters, Flush Cutters, Side Cutters", "Lockout Tagout Station,Loto Kits, Includes 14 Key Different Padlocks with Number", "Scotch Magic Tape, Invisible, Home Office Supplies and Back to School Supplies f", "Scissors Set of 6-Pack, 8\" Scissors All Purpose Comfort-Grip Handles, Sharp Scis", "BIC Wite-Out EZ Correct Correction Tape, School Supplies for Students and Teache", "Kanayu 10 Pcs Magnetic Hooks Heavy Duty Magnetic Wreath Hanger, Magnet Tool Hold", "Assorted Size Binder Clips & Jumbo Paper Clips Set - 340pcs Black, Large for Off", "EXPO Dry Erase Markers, Low Odor Ink, Assorted Fashion Colors, Chisel Tip, 36 Co", "Ladder Hook - Black Heavy Duty Ladder Brackets for Garage Wall - Utility Hook fo", "Global Industrial Counter Height Cabinet with Locking Lever Handle, 2 Height Adj", "Suncast Outdoor Storage Shed, Water Resistant Resin Vertical Outdoor Storage Cab", "Strongway Steel Jumbo Garden Wagon with Removable Sides, 1400 Lb Capacity, 50 in", "Apollo Hand Pallet Jack Truck Duty Industrial Pallet Truck 5500lbs Capacity, 27'", "Scartink 6PCS Black Heavy Duty Bike Storage Hooks Bicycle Wall Mounted Hooks Lar", "8 Pack Heavy Duty Large 13-inch Extension Cord Storage Extendable Cable Ties Str", "PARLAIM 1 Inch Round Permanent Adhesive Color-Code Dot Stickers,1000 per Roll do", "Nite Ize S-Biner Stainless Steel Dual Carabiner - Multi Purpose Dual Carabiner C", "Strongway P-Handle Hand Truck - 1000-Lb. Capacity, Oversized Toe Plate", "Fluke TL224 SureGrip Insulated Test Leads", "Fluke TL40 Retractable Tip Test Lead Set, Right Angle", "Milwaukee 48-22-5112 12 in. Digital Measuring Wheel", "SmartSign Ice Alert Sign - 12 x 7 inch, Universal Mount Temperature Sensitive In", "Extech AN100 CFM/CMM Mini Thermo-Anemometer", "Supco VG64 Vacuum Gauge, Digital Display, 0-12000 microns Range, 10% Accuracy, 1", "Electric Wall Scanner", "Extech 407732 Type 2 Digital Sound Level Meter 35 to 130 dB", "Extech 401025 Foot Candle/Lux Light Meter", "Fluke 1AC II VoltAlert Non-Contact Voltage Tester, Pocket-Sized, 90-1000V AC, Au", "Simpli-Magic 2 in 1 Convertible Hand Truck and Dolly, 800LBS – Heavy-Duty Moving", "FCMP Outdoor - Outdoor Salt, Sand, and Storage Bin – Residential Deck Box, Multi", "Rubbermaid Commercial Products BRUTE Rollout Heavy-Duty Wheeled Trash/Garbage Ca", "Amazon Basics Office Stapler with 1000 Staples, 25 Sheet Capacity, Non-Slip, Bla", "Desktop Tape Dispenser - Non-Skid Base - Weighted Tape Roll Dispenser - Perfect", "Pilot G2 Pens, Premium Refillable and Retractable Rolling Ball Gel Pens, Fine Po", "Swingline 1 Hole Punch, 20 Sheet Capacity Hole Puncher, Low Force Plier Paper Pu", "Amazon Basics Sturdy File Folders with Reinforced Tabs for Filing and Organizati", "Amazon Basics Sheet Protectors for 3 Ring Binder, Heavyweight, Acid-Free, Clear", "Amazon Basics 5-Tier Mesh Desk Organizer, File Holder, Paper Sorter for Office S", "Amazon Basics Hanging File Folders with Adjustable Tabs, Sturdy Expandable Docum", "EBOOT 2 Pack Plastic Ruler Straight Ruler Plastic Measuring Tool for Student Sch", "Amazon Basics 3-Ring Binder with Round Rings and Interior Pockets, 1-Inch, White", "Bostitch Office EZ Squeeze Heavy Duty 3-Hole Punch for Home Office & School, 40-", "2 Pack Sharpie 44101 Sharpie Magnum Permanent Marker Black", "Sharpie Magnum Permanent Marker | Oversized Chisel Tip, Great for Poster Boards,", "Sharpie Permanent Markers, Fine Tip, 12 Count - Quick Drying, Fade Resistant, Ar", "EXPO Wet Erase Markers, Semi-Permanent Markers, Assorted, Ultra Fine Point, 4 Co", "Post-it Super Sticky Notes, 24 Sticky Note Pads, 3 x 3 in., School Supplies, Off", "Amazon Basics Wood-Cased #2 HB School Pencils with Erasers for Writing and Drawi", "Sharpie Accent Tank-Style Highlighters, Assorted Colors, 4 Count - Back to Schoo", "Amazon Basics Stapler Value Pack, 25 Sheet Capacity, Standard, with 3000 Staples", "Amazon Basics Dry-Erase Whiteboard Erasers with Soft Pile, for School, Office, H", "BIC Round Stic Xtra Life Ballpoint Pen, Ultra Long Lasting and Consistent Ink Fl", "KleenGuard™ V30 Nemesis™ Safety Glasses (25688), with Mirror Coating, Smoke Lens", "AOMAG Super Strong Neodymium Magnet Holds 35 Lbs Sintered NdFeB Magnetic Hooks (", "SimplyImagine Safety Glasses Holder Wall Mount Dispenser Bin - Clear Acrylic Top", "GOJO 1905-02 PURELL LTX-12 LTX Instant Foam Hand Sanitizer, Shape, (Pack of 2)", "Dansydaisy 2 Pcs Spill Kit Bag Only, Universal Portable Emergency Duffle Spill B", "3M P100 Respirator Cartridge/Filter 60922, 1 Pair, NIOSH APPROVED, Helps Protect", "Better Blue Poly Tarp 40' x 60' - (Cut Size) Multipurpose Protective Cover - Lig", "Tarp 20x30 ft 100% Waterproof Uv Resistant High Durability Multipurpose 5mil Blu", "RAINDEWAY Tarps - 20x30 Feet, 5.5 Mil Thick, Multipurpose Waterproof Poly Tarp C", "Master Lock Brass Combination Padlock for Indoor and Outdoor use with Resettable", "PIG Battery Disposal Container | Used Dry-Cell Battery Storage | 2 Gallon Capaci", "UltraTech 2130 Ultra-Drain Seal Drain Cover, Orange Urethane, 36\" x 36\"", "FROGG TOGGS Ultra-lite2 Waterproof, Breathable Rain Poncho, Adult and Youth Size", "RoadRunner Scotwood Industries Ice Melt, 50 lb. Bag (SWO50BRR) (8 Bags)", "Buyers Products WC1086 Rubber Wheel Chock with Chain Eye, 10x8x6 Inch, Heavy Dut", "Klever Kutter Xchange Cutter, Box, Safety, Yellow, 12 Piece", "Ready America 72 Hour Deluxe Emergency Kit, 4-Person 3-Day Backpack, First Aid K", "Luminary Tactical Trauma Kit Fully Stocked First Aid Kit Backpack EMS/EMT First", "Master Lock S1850E410 Lockout Tagout Padlock & Electrical Station", "Ironclad HEATWORX HEAVY DUTY FR; Fire Resistant Gloves, handle hot items – up to", "Oil-Dri L90435 Compact Universal 5-Gallon Bucket Spill Kit, 5-Gallon Maximum Abs", "Quantum Storage QUS240 Heavy-Duty Stackable Plastic Storage Bins for Workshop, W", "QUANTUM STORAGE SYSTEMS K-QUS234GN-6 6-Pack Ultra-Stack and Hang Bins, 14-3/4\" x", "Rubbermaid Commercial Products Heavy Duty 4-Shelf Rolling Service/Utility/Push C", "WEN 500-Pound Capacity 46 By 25.5-Inch Extra Wide Service Utility Cart", "Milwaukee Electric - 6-1/2 in. Ferrous Metal Blade", "ANGELSWORD 6-1/2 Inch Circular Saw Blade, 24T for Framing&40T for Ripping, Cross", "BIZOEIRON 3 Doors Locker Storage Cabinet, Metal Locker for Employees, 72\" Tall L", "HBFBDRCT Furniture Dolly 4 Wheels, 22 x 11 inch, Furniture Movers, Two Packs of", "Nibbler, 10 Ga", "SKPPC 30 Pieces 1/2 Inch Teflon Tape Industrial Thread Seal Tapes Plumbing Water", "Oil-Dri L90902 15\" W x 19\" L Universal Heavy Weight Bonded Perforated Pads (100", "Wiha 32611 SoftGrip Electrician's and Craftsman Sheers", "HAUTMEC 12\" Heavy Duty Hacksaw with High-Tension Solid Aluminium Frame, 45°/90°", "Crescent Wiss 9-3/4\" MetalMaster Compound Action Straight and Left Aviation Snip", "RIDGID 31105 Model 824 Aluminum Straight Pipe Wrench, 24-inch Plumbing Wrench, g", "RIDGID 31100 Model 818 Aluminum Straight Pipe Wrench, 18-inch Plumbing Wrench", "RIDGID 31095 Model 814 Aluminum Straight 14\" Plumbing Pipe Wrench, Silver, Made", "Orion Motor Tech Gear Puller Set, 3\" 4\" 6\" 8\" 3 Jaw Puller Kit for Pulley Gear B", "SUNEX TOOLS 9704 Pry Bar Set with Ergonomic Handles, 8\" - 24\", 4-Piece", "GEARWRENCH 33\" Extendable Indexing Pry Bar - 82220", "IRWIN VISE-GRIP Locking Pliers Set, Original, 2-Piece, # 37 (IWHT23049L)", "GEARWRENCH 19 Piece 1/2 Inch Drive 6 Point Impact Socket Set, Deep, SAE - 84934N", "ALTA 50413 AltaFLEX Knee Protector Pad, Black Cordura Nylon Fabric, AltaLOK Fast", "Flexzilla Garden Hose 5/8 in. x 100 ft., Lightweight All-Weather Water Hose, Dur", "Milwaukee LED Focusing Flashlight - 325 Lumens, Model Number 2107S", "Outdoor Extension Cord 25 FT Waterproof, 16/3 Gauge Heavy Duty 3 Prong Extension", "Southwire Yellow Jacket Heavy Duty Extension Cord - Reliable Outdoor Power for T", "DEWENWILS 10-Outlet Metal Surge Protector Power Strip with 15Ft Cord, UL Listed,", "Tripp Lite Standard Computer Power Cord 10A,18AWG (NEMA 5-15P to IEC-320-C13) 15", "Kwik Cycle Crimping Tool", "Beam Clamp, Up to 1/2 in. Jaw Opening", "Milwaukee Electric - 6-1/2 in. 54T Non-Ferrous Blade", "Milwaukee 49-22-0071 Spade Wood Boring Bit Set", "Milwaukee 48-89-0011 14 Piece Titanium Drill Bit Set", "Continental 50' x 3/8\" Red Rubber Air Hose - Working Pressure: 250 PSI - Burst P", "Amazon Basics Rectangular Plastic Office Wastebasket,14.4\"L x 10.3\"W x 15\"H, 7 G", "Avery Waterproof Labels with Ultrahold Adhesive, 1-1/3\" x 4\", Case of 7,000 Labe", "Angel Soft Professional Series by Georgia-Pacific PRO 2-Ply Embossed Toilet Pape", "Scotch Thermal Laminator, 2 Roller System for a Professional Finish, Use for Hom", "Scotch Thermal Laminating Pouches, for Use with Thermal Laminators, 8.9 x 11.4 I", "Office Conference Room Door Signs, Meeting in Progress Door Sign, In Use Availab", "Amazon Basics Multipurpose Copy Printer Paper, 20 lb, 8.5 x 11 Inches, 3 Reams (", "Wellness Room Door Sign Do Not Disturb,Versatile In-Use/Available Slider Sign fo", "LDR Industries 504 1300 Garden Dehumidifier Drain Hose, 5ft, Green Rubber Finish", "Vacant Occupied Sign for Home Office Hotles Hospital Restroom,Slider Door sign (", "Bloodborne Pathogen & Vomit Cleanup Kit 2pack- Be OSHA Compliant| First Response", "ASIN: B0BC6WW5VW", "HZSSLKM Metal Glove Holder for Wall Mount(2 PACK),Glove Box Holder Wall Mount fo", "GEARWRENCH 1/2\" Drive Long Length Hex Bit Socket, 8mm - 82580", "GEARWRENCH 1/2\" Drive Long Length Hex Bit Socket, 12mm - 82582", "Salfboy Safety Glasses Ansi Z87.1 Clear Safety Glasses Bulk Impact Resistant Len", "Battery Acid Spill Kit, 5 gal, 13x13x17", "Duracell - CopperTop 9V Alkaline Batteries - long lasting, all-purpose 9 Volt ba", "GUSTO Black Nitrile Gloves [100 Count] 6 Mil, HEAVY DUTY Disposable Gloves for F", "PARLAIM 1000 Pack, Green Dot Stickers 1 inch Round Circle Labels Garage Sale Sti", "Do Not Disturb Welcome Please Knock Sign,Privacy Sign for Home Office Hotles Hos", "Wilton C-Clamp, 4\" Opening, 2-5/16\" Throat, 3700 Lbs. Clamping Force (Model 804)", "Fippy 20PCS Air Compressor Accessory Kit with Hose, Air Compressor Tool Includes", "Wiegmann SC121204 SC-Series NEMA 1 Screw Cover Wallmount Pull Box with Knockouts", "SALI Cobalt Drill Bit Set,5 Pack 5/16 Inch High Speed Steel Hex Shank Jobber Dri", "LeadSeals 100 Blue Steel Cable Seals with Barcode - High Security Numbered Truck", "Champion Cutting Tool Brute Platinum 29 Piece 1/16-1/2\" x 64ths HSS Mechanics Le", "Dremel 8193 Aluminum Oxide Grinding Stone", "innomaker Industrial-Grade USB to Serial RS232 Adapter,USB to Male DB9, FTDI Chi", "Thomas & Betts ERG50 Ergonomic Hand Tool for Nylon Cable Ties 18 to 50 Pounds", "Loctite Anti-Seize Compound, 8 oz Can,199012", "18-8 (304) Stainless Steel Hex Cap Screws Bolts Nuts Washers Assortment Kit - 57", "7.5-inch Black Zip Ties Heavy Duty UV Resistant Nylon Cable Ties, 50lb Tensile S", "Granular Clay Floor Absorbent, 50 lb., Bag", "AccuformNMC 25 Count Inspection Records Saftey Tag, Inspection Record, PF-Cardst", "Gran-sorb Sorbent Granules Universal Granular Absorbent - Absorbs Oil & Water-Ba", "Brady All Weather Permanent Adhesive Vinyl Label Tape for M710 and BMP71 Printer", "Mechanix Wear: The Original Covert Tactical Work Gloves with Secure Fit, Flexibl", "Simpson Strong-Tie LSTA9 LSTA 1-1/4 in. x 9 in. 20-Gauge Galvanized Strap Tie (P", "Ullman HTC-2LT LED Lighted TELESCOPING Inspection Mirror 2-3/8 Dia", "Lichamp 10-Pack Green Electrical Tape Waterproof, 3/4 in x 66ft, Industrial Grad", "B'laster 16-PB-DS ProStraw Powerful Rust Penetrating Catalyst and Lubricant for", "TradeGear Pink 10 Pack - UL Listed Colored Electrical Tape, 60 ft x 3/4 in, 600V", "DEWALT Electric Pressure Washer, Cold Water, 2400-PSI, 1.1-GPM, Corded (DWPW2400", "Brio Bottom Loading Water Cooler Dispenser for 5 Gallon Bottles - 3 Temperatures", "COLORTY TZ Label 18mm 0.7 Laminated Replacement for Brother P-Touch TZe-641 Blac", "Brother PT-E510VP P-Touch Edge Handheld Industrial Label Printer with Dual auto", "C-Line Retracting ID Card/Badge Reels, Belt Clip with Snap-On ID Strap, 30-Inch", "Frienda 8 Pcs Jumbo Door Stoppers Heavy Duty Door Stopper Tall up to 2inch Tall", "Brady - M71-R6000-BRADY B71 Series R6000 Printer Ribbon (M71-R6000) - Black - 15", "Master Lock Heavy Duty Wall Mount Key Lock Box, Holds 5 Keys - Ideal for Landlor", "Nebakne 144 Keys Fireproof Cabinet Safe With Adjustable Hook Plates and Tags, An", "Zurn JP1996-MH - Mop Hanger", "Igloo Industrial Water Cooler 3 gal. Red/Yellow", "Staples Plastic Clipboards, Letter Size, Black, 6‑Pack – Durable Office Clipboar", "OIKWAN USB to RS232, USB Serial Adapter with FTDI Chipset,USB 2.0 to Male DB9 Se", "ESSENTIAL 4\"x 2\" Direct Thermal Barcode Labels, Shipping Labels Compatible with", "ZOMAKE Golf Umbrella, Large Oversize Windproof Heavy Duty Umbrellas for Rain, Ex", "Mind Reader Umbrella Stand, Multi-Purpose Mesh Storage Stand, Organizer for Offi", "Wiha 32095 Slotted and Phillips Insulated Screwdriver Set, 1000 Volt, 19 Piece", "GROWNEER Digital Torque Screwdriver, 2.66-53.1 In-lb/0.3-6 Nm, 1/4'' Drive Inch", "Milwaukee Electric - M18TRADE Compact BRUSHLESS 2-Tool Combo KIT", "KLEIN TOOLS BLS22 22-Piece Long Ball-End Hex Key Wrench Set, SAE and Metric, Hea"];
 var BUILDINGS = ["201","202","203","204","205","206","207","208","209"];
-var BOXES = [1,2,3,4,5];
 var LS_LEDGER = "connex_ledger_v1";
+var LS_CUSTOM_ITEMS = "connex_custom_items_v1";
+/* Quick-add: user-created items not on the original BOM master.
+   Persisted locally AND implicitly synced (every logged record stores the
+   item name, so any device with the synced ledger re-derives the full list).
+   No Firebase rules/node change needed. */
+function loadCustomItems(){ try{ return JSON.parse(SS.get(LS_CUSTOM_ITEMS))||[]; }catch(e){ return []; } }
+function saveCustomItems(arr){ SS.set(LS_CUSTOM_ITEMS, JSON.stringify(arr)); }
+/* The full searchable list = BOM master + saved custom items + any item names
+   already present in the ledger (covers items added on another device). */
+function searchableItems(){
+  var set={}; var out=[];
+  function add(n){ if(n && !set[n.toLowerCase()]){ set[n.toLowerCase()]=1; out.push(n); } }
+  BOM_ITEMS.forEach(add);
+  loadCustomItems().forEach(add);
+  try{ (ledger||[]).forEach(function(r){ if(r && r.item) add(r.item); }); }catch(e){}
+  return out;
+}
+function addCustomItem(name){
+  name=(name||"").trim();
+  if(!name) return null;
+  // dedupe case-insensitively against everything already known
+  var exists=searchableItems().some(function(x){ return x.toLowerCase()===name.toLowerCase(); });
+  if(!exists){
+    var cur=loadCustomItems(); cur.push(name); saveCustomItems(cur);
+    if(BOM_ITEMS.indexOf(name)===-1) BOM_ITEMS.push(name);
+  }
+  return name;
+}
 var LS_THEME  = "connex_theme";
 
 /* ---- safe storage shim ----
@@ -422,7 +492,7 @@ function updateApproval(){
 function validRow(r){
   return r && typeof r.item==="string" && r.item.length>0 &&
     (r.type==="in"||r.type==="out") && Number.isSafeInteger(r.qty) &&
-    r.qty>0 && BOXES.indexOf(Number(r.box))!==-1 && typeof r.id==="string";
+    r.qty>0 && typeof r.bldg!=="undefined" && r.bldg!==null && typeof r.id==="string";
 }
 function asMap(rows){
   var m={}; (rows||[]).forEach(function(r){if(validRow(r))m[r.id]=r;});return m;
@@ -433,7 +503,7 @@ function refreshFromCloud(rows){
   pending.forEach(function(r){combined[r.id]=r;});
   ledger=mapRows(combined);
   SS.set(LS_LEDGER,JSON.stringify(ledger));
-  renderBatch();renderShop();renderLedger();updateSync();
+  renderBatch();renderShop();renderLedger();if(typeof renderRooms==="function")renderRooms();updateSync();
 }
 function initFirebase(){
   if(typeof firebase==="undefined"){syncError="Firebase SDK unavailable";updateSync();return;}
@@ -443,7 +513,7 @@ function initFirebase(){
       if(approvalListener){approvalListener.off();approvalListener=null;}
       if(!user){approved=false;accessDenied=false;requestAttemptUid="";cloudReady=false;currentAuthUid="";listeningCloud=false;updateApproval();firebase.auth().signInAnonymously().catch(function(e){syncError="Sign-in: "+e.message;updateSync();});return;}
       currentAuthUid=user.uid;
-      if(!user.isAnonymous){approved=false;accessDenied=false;cloudReady=false;syncError="Administrator session detected. Open admin.html in this browser, or sign out there and reload Connex.";updateApproval();updateSync();return;}
+      if(!user.isAnonymous){approved=false;accessDenied=false;cloudReady=false;syncError="Administrator session detected. Open admin.html in this browser, or sign out there and reload Watt's in Stock.";updateApproval();updateSync();return;}
       fbRef=firebase.database().ref("connex");stateRef=fbRef.child("state");
       approvalListener=firebase.database().ref("connexAccess/approved/"+user.uid);
       approvalListener.on("value",function(snap){
@@ -528,11 +598,11 @@ function commitOutflows(rows,onSuccess){
     current.records=current.records||{};
     var stock={};
     mapRows(current.records).forEach(function(r){
-      var key=cartKey(r.item,r.box);
+      var key=cartKey(r.item,r.bldg);
       stock[key]=(stock[key]||0)+(r.type==="in"?r.qty:-r.qty);
     });
     for(var i=0;i<rows.length;i++){
-      var r=rows[i],key=cartKey(r.item,r.box);
+      var r=rows[i],key=cartKey(r.item,r.bldg);
       if((stock[key]||0)<r.qty){rejection="Insufficient stock: "+short(r.item,28);return;}
       stock[key]-=r.qty;
     }
@@ -561,7 +631,8 @@ if(SS.get(localImportKey)!=="1" && ledger.length){
   pending=mapRows(pendingById);
   SS.set(pendingKey,JSON.stringify(pending));
 }
-var cur = { item:null, qty:1, box:null, photo:null };
+var cur = { item:null, qty:1, photo:null };
+var activeRoom = null;   // the building whose room the intake flow is writing into
 var batch = [];                 // pending intake rows (not yet committed)
 
 /* ---------- storage ---------- */
@@ -582,45 +653,57 @@ function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"
   clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove("show"); },1800); }
 function enable(el,on){ if(on) el.classList.remove("is-disabled"); else el.classList.add("is-disabled"); }
 
-/* on-hand derived: intake − outflow, per item (optionally per box) */
-function onHand(box){
+/* on-hand derived: intake − outflow, per item (optionally per building) */
+function onHand(bldg){
   var map={};
   ledger.forEach(function(r){
-    if(box && String(r.box)!==String(box)) return;
-    var k=r.item+"|||"+r.box;
-    if(!map[k]) map[k]={item:r.item,box:r.box,qty:0};
+    if(bldg && String(r.bldg)!==String(bldg)) return;
+    var k=r.item+"|||"+r.bldg;
+    if(!map[k]) map[k]={item:r.item,bldg:r.bldg,qty:0};
     map[k].qty += (r.type==="in"? r.qty : -r.qty);
   });
   return Object.values(map);
 }
+/* distinct items with stock>0 in a building */
+function roomItemCount(bldg){
+  return onHand(bldg).filter(function(x){ return x.qty>0; }).length;
+}
 
 /* ---------- build static UI ---------- */
-(function initBuildings(){
-  var s=$("bldgSel");
-  BUILDINGS.forEach(function(b){ var o=document.createElement("option"); o.value=b; o.textContent="SBN"+b; s.appendChild(o); });
-})();
-(function initBoxes(){
-  var bp=$("boxPicker");
-  BOXES.forEach(function(n){
-    var btn=document.createElement("button"); btn.textContent=n; btn.dataset.box=n;
-    btn.onclick=function(){ selectBox(n); };
-    bp.appendChild(btn);
+/* Shop filter bar: All + one chip per building (SBN201–209) */
+(function initShopFilter(){
+  var fb=$("shopFilter"); if(!fb) return;
+  var all=document.createElement("button"); all.className="active"; all.dataset.bldg="all"; all.textContent="All"; fb.appendChild(all);
+  BUILDINGS.forEach(function(b){
+    var btn=document.createElement("button"); btn.dataset.bldg=b; btn.textContent="SBN"+b; fb.appendChild(btn);
   });
 })();
 
 /* ---------- item search ---------- */
 var searchEl=$("itemSearch"), resultsEl=$("results");
 searchEl.addEventListener("input", function(){
-  var q=this.value.trim().toLowerCase();
+  var raw=this.value.trim();
+  var q=raw.toLowerCase();
   if(!q){ resultsEl.classList.add("hidden"); return; }
-  var matches=BOM_ITEMS.filter(function(it){ return it.toLowerCase().indexOf(q)>-1; }).slice(0,40);
+  var matches=searchableItems().filter(function(it){ return it.toLowerCase().indexOf(q)>-1; }).slice(0,40);
   resultsEl.innerHTML="";
-  if(!matches.length){ resultsEl.innerHTML='<div class="muted">No match — check spelling or add later.</div>'; }
-  else matches.forEach(function(it){
+  matches.forEach(function(it){
     var d=document.createElement("div"); d.textContent=short(it,80);
     d.onclick=function(){ selectItem(it); };
     resultsEl.appendChild(d);
   });
+  if(!matches.length){
+    var none=document.createElement("div"); none.className="muted"; none.textContent="No match on the list.";
+    resultsEl.appendChild(none);
+  }
+  // Quick-add row — always offered so a genuinely new item can be created on the spot.
+  var exact=matches.some(function(it){ return it.toLowerCase()===q; });
+  if(raw.length>=2 && !exact){
+    var add=document.createElement("div"); add.className="quickadd";
+    add.innerHTML='\u2795 Add \u201C'+short(raw,46)+'\u201D as a new item';
+    add.onclick=function(){ var name=addCustomItem(raw); if(name){ toast("New item added"); selectItem(name); } };
+    resultsEl.appendChild(add);
+  }
   resultsEl.classList.remove("hidden");
 });
 document.addEventListener("click",function(e){
@@ -628,21 +711,11 @@ document.addEventListener("click",function(e){
 });
 
 function selectItem(it){
-  cur.item=it; cur.qty=1; cur.box=null; cur.photo=null;
+  cur.item=it; cur.qty=1; cur.photo=null;
   $("selItemName").textContent=it;
   $("qtyVal").textContent="1";
   $("photoPreview").innerHTML="";
   $("photoInput").value="";
-  document.querySelectorAll("#boxPicker button").forEach(function(b){ b.classList.remove("sel"); });
-  // suggest box where this item already lives
-  var existing=onHand().find(function(x){ return x.item===it && x.qty>0; });
-  $("boxHint").textContent = existing ? ("💡 "+it.split(",")[0].slice(0,24)+"… is already in Box "+existing.box+" — keep like items together.") : "Pick any box.";
-  // mark boxes that already hold this item
-  document.querySelectorAll("#boxPicker button").forEach(function(b){
-    var has=onHand().some(function(x){ return x.item===it && String(x.box)===b.dataset.box && x.qty>0; });
-    b.querySelector(".dot")&&b.querySelector(".dot").remove();
-    if(has){ var dot=document.createElement("span"); dot.className="dot"; dot.textContent="●"; b.appendChild(dot); }
-  });
   $("itemDetail").classList.remove("hidden");
   resultsEl.classList.add("hidden");
   searchEl.value="";
@@ -654,14 +727,6 @@ $("clrItem").onclick=function(){ cur.item=null; $("itemDetail").classList.add("h
 $("qtyMinus").onclick=function(){ if(cur.qty>1){ cur.qty--; $("qtyVal").textContent=cur.qty; } };
 $("qtyPlus").onclick =function(){ cur.qty++; $("qtyVal").textContent=cur.qty; };
 
-/* box */
-function selectBox(n){
-  cur.box=n;
-  document.querySelectorAll("#boxPicker button").forEach(function(b){
-    b.classList.toggle("sel", String(b.dataset.box)===String(n)); });
-  refreshAddBtn();
-}
-
 /* photo — tap-triggered file input (never auto .click without user gesture) */
 $("photoBtn").onclick=function(){ $("photoInput").click(); };
 $("photoInput").onchange=function(e){
@@ -672,16 +737,14 @@ $("photoInput").onchange=function(e){
   r.readAsDataURL(f);
 };
 
-function refreshAddBtn(){ enable($("addNextBtn"), !!(cur.item && cur.box)); }
+function refreshAddBtn(){ enable($("addNextBtn"), !!(cur.item && activeRoom)); }
 
 /* add & next */
 $("addNextBtn").onclick=function(){
-  if(!cur.item || !cur.box) return;
-  var b=$("bldgSel").value;
-  if(!b){ toast("Pick a source building first"); return; }
-  batch.push({ item:cur.item, qty:cur.qty, box:cur.box, photo:cur.photo, bldg:b });
+  if(!cur.item || !activeRoom) return;
+  batch.push({ item:cur.item, qty:cur.qty, photo:cur.photo, bldg:activeRoom });
   renderBatch();
-  cur={item:null,qty:1,box:null,photo:null};
+  cur={item:null,qty:1,photo:null};
   $("itemDetail").classList.add("hidden");
   $("photoPreview").innerHTML="";
   $("photoInput").value="";
@@ -697,7 +760,7 @@ function renderBatch(){
   batch.forEach(function(r,i){
     var row=document.createElement("div"); row.className="batchrow";
     row.innerHTML='<div>'+ (r.photo?'📷 ':'') + short(r.item,30) +
-      '<span class="pill">×'+r.qty+'</span><span class="pill">Box '+r.box+'</span></div>';
+      '<span class="pill">SBN'+r.bldg+'</span><span class="pill">×'+r.qty+'</span></div>';
     var x=document.createElement("button"); x.className="x"; x.textContent="✕";
     x.onclick=function(){ batch.splice(i,1); renderBatch(); };
     row.appendChild(x); wrap.appendChild(row);
@@ -707,55 +770,56 @@ function renderBatch(){
 
 /* finish batch → commit all rows at once */
 $("finishBtn").onclick=function(){
-  var b=$("bldgSel").value;
-  if(!b){ toast("Pick a source building first"); return; }
   if(!batch.length) return;
   var ts=Date.now();
-  var rows=batch.map(function(r){return newRecord("in",r.item,r.qty,r.box,r.bldg,r.photo,ts);});
+  var rows=batch.map(function(r){return newRecord("in",r.item,r.qty,null,r.bldg,r.photo,ts);});
   queueIntake(rows);
   toast("Saved "+rows.length+" intake items"+(cloudOnline?" · syncing":" · pending sync"));
-  batch=[];renderBatch();renderShop();renderLedger();
+  batch=[];renderBatch();renderShop();renderLedger();renderRooms();
+  // return to the room detail so the operator sees the updated on-hand
+  openRoom(activeRoom);
+  switchView("rooms");
 };
 
 /* ---------- SHOP view ---------- */
-var shopBoxFilter="all";
+var shopBldgFilter="all";
 $("shopFilter").addEventListener("click",function(e){
   var btn=e.target.closest("button"); if(!btn) return;
-  shopBoxFilter=btn.dataset.box;
+  shopBldgFilter=btn.dataset.bldg;
   this.querySelectorAll("button").forEach(function(b){ b.classList.toggle("active",b===btn); });
   renderShop();
 });
-var cart = {};  /* key item|||box -> {item,box,qty,avail} */
-function cartKey(item,box){ return item+"|||"+box; }
+var cart = {};  /* key item|||bldg -> {item,bldg,qty,avail} */
+function cartKey(item,bldg){ return item+"|||"+bldg; }
 function cartSize(){ return Object.values(cart).reduce(function(s,c){ return s+c.qty; },0); }
 
 function renderShop(){
   var rows=onHand().filter(function(x){ return x.qty>0; });
-  if(shopBoxFilter!=="all") rows=rows.filter(function(x){ return String(x.box)===shopBoxFilter; });
+  if(shopBldgFilter!=="all") rows=rows.filter(function(x){ return String(x.bldg)===shopBldgFilter; });
   rows.sort(function(a,b){ return a.item.localeCompare(b.item); });
   $("shopTotal").textContent=rows.length+" items";
   var wrap=$("shopList");
   if(!rows.length){ wrap.innerHTML='<div class="empty">Nothing available in this view yet.</div>'; renderCartBar(); return; }
   wrap.innerHTML="";
   rows.forEach(function(x){
-    var k=cartKey(x.item,x.box);
+    var k=cartKey(x.item,x.bldg);
     var inCart = cart[k] ? cart[k].qty : 0;
     var d=document.createElement("div"); d.className="shoprow";
     var info=document.createElement("div"); info.style.flex="1"; info.style.paddingRight="8px";
-    info.textContent=short(x.item,46)+' · Box '+x.box;
+    info.innerHTML=short(x.item,46)+' <span class="pill">SBN'+x.bldg+'</span>';
     var q=document.createElement("div"); q.className="q"; q.textContent=x.qty;
     var btn=document.createElement("button"); btn.className="add"+(inCart?" inCart":"");
     btn.textContent = inCart ? ("＋ ("+inCart+")") : "＋ Add";
-    btn.onclick=function(){ addToCart(x.item,x.box,x.qty); };
+    btn.onclick=function(){ addToCart(x.item,x.bldg,x.qty); };
     d.appendChild(info); d.appendChild(q); d.appendChild(btn);
     wrap.appendChild(d);
   });
   renderCartBar();
 }
 
-function addToCart(item,box,avail){
-  var k=cartKey(item,box);
-  if(!cart[k]) cart[k]={item:item,box:box,qty:0,avail:avail};
+function addToCart(item,bldg,avail){
+  var k=cartKey(item,bldg);
+  if(!cart[k]) cart[k]={item:item,bldg:bldg,qty:0,avail:avail};
   if(cart[k].qty >= avail){ toast("Only "+avail+" available"); return; }
   cart[k].qty++; cart[k].avail=avail;
   toast("Added to cart");
@@ -776,10 +840,10 @@ function renderCart(){
   enable($("checkoutBtn"),true);
   wrap.innerHTML="";
   items.forEach(function(c){
-    var k=cartKey(c.item,c.box);
+    var k=cartKey(c.item,c.bldg);
     var row=document.createElement("div"); row.className="cartrow";
     var info=document.createElement("div"); info.style.flex="1";
-    info.textContent=short(c.item,34)+' · Box '+c.box+' · '+c.avail+' available';
+    info.innerHTML=short(c.item,34)+' <span class="pill">SBN'+c.bldg+'</span> · '+c.avail+' available';
     var mini=document.createElement("div"); mini.className="mini";
     var minus=document.createElement("button"); minus.textContent="−";
     minus.onclick=function(){ cart[k].qty--; if(cart[k].qty<=0) delete cart[k]; renderCart(); renderShop(); };
@@ -803,7 +867,7 @@ function checkoutCart(){
   var items=Object.values(cart).filter(function(c){return c.qty>0;});
   if(!items.length)return;
   var ts=Date.now(),total=items.reduce(function(n,c){return n+c.qty;},0);
-  var rows=items.map(function(c){return newRecord("out",c.item,c.qty,c.box,"210",null,ts);});
+  var rows=items.map(function(c){return newRecord("out",c.item,c.qty,null,c.bldg,null,ts);});
   commitOutflows(rows,function(){
     cart={};toast("✓ Checked out "+total+" items");closeCart();renderLedger();
   });
@@ -827,7 +891,7 @@ function renderLedger(){
     var d=document.createElement("div"); d.className="ledrow";
     var when=new Date(r.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});
     d.innerHTML='<div style="flex:1;padding-right:8px">'+short(r.item,38)+
-      '<div class="hint">'+(r.alias||'Legacy')+' · '+(r.type==="in"?("SBN"+r.bldg+" → "):"pull ← ")+'Box '+r.box+' · '+when+'</div></div>'+
+      '<div class="hint">'+(r.alias||'Legacy')+' · '+(r.type==="in"?"intake → ":"pull ← ")+'SBN'+r.bldg+' · '+when+'</div></div>'+
       '<div style="text-align:right"><span class="tag '+r.type+'">'+(r.type==="in"?"+":"−")+r.qty+'</span></div>';
     wrap.appendChild(d);
   });
@@ -836,7 +900,7 @@ function renderLedger(){
 $("outflowBtn").onclick=function(){
   var avail=onHand().filter(function(x){ return x.qty>0; });
   if(!avail.length){ toast("Nothing in stock to pull"); return; }
-  var list=avail.map(function(x,i){ return (i+1)+". "+short(x.item,34)+" (Box "+x.box+", "+x.qty+" avail)"; }).join("\n");
+  var list=avail.map(function(x,i){ return (i+1)+". "+short(x.item,34)+" (SBN"+x.bldg+", "+x.qty+" avail)"; }).join("\n");
   var pick=safePrompt("Log an OUTFLOW (210 pull).\nEnter the number of the item:\n\n"+list);
   if(!pick) return;
   var idx=parseInt(pick,10)-1;
@@ -845,21 +909,77 @@ $("outflowBtn").onclick=function(){
   var q=parseInt(safePrompt("How many pulled? (max "+it.qty+")","1"),10);
   if(isNaN(q)||q<1){ toast("Cancelled"); return; }
   if(q>it.qty){ toast("Only "+it.qty+" available"); return; }
-  commitOutflows([newRecord("out",it.item,q,it.box,"210",null,Date.now())],function(){
-    toast("➖ Logged pull of "+q);renderShop();renderLedger();
+  commitOutflows([newRecord("out",it.item,q,null,it.bldg,null,Date.now())],function(){
+    toast("➖ Logged pull of "+q);renderShop();renderLedger();renderRooms();
   });
 };
 
-/* ---------- nav ---------- */
+/* ---------- nav / view switching ----------
+   Views: rooms (home/default, holds the room grid + room detail sub-state),
+   shop, admin(ledger). Intake is NOT a top-level tab — it is reached by tapping
+   a building in Rooms, so it has no nav button but is still a <section>. */
+function switchView(v){
+  document.querySelectorAll("nav button").forEach(function(b){ b.classList.toggle("active",b.dataset.view===v); });
+  ["rooms","intake","shop","admin"].forEach(function(name){ $("view-"+name).classList.toggle("hidden",name!==v); });
+  if(v==="rooms") renderRooms();
+  if(v==="shop") renderShop();
+  if(v==="admin") renderLedger();
+}
 document.querySelectorAll("nav button").forEach(function(btn){
-  btn.onclick=function(){
-    var v=btn.dataset.view;
-    document.querySelectorAll("nav button").forEach(function(b){ b.classList.toggle("active",b===btn); });
-    ["intake","shop","admin"].forEach(function(name){ $("view-"+name).classList.toggle("hidden",name!==v); });
-    if(v==="shop") renderShop();
-    if(v==="admin") renderLedger();
-  };
+  btn.onclick=function(){ switchView(btn.dataset.view); };
 });
+
+/* ---------- ROOMS home + room detail ---------- */
+function renderRooms(){
+  var grid=$("roomsGrid"); if(!grid) return;
+  grid.innerHTML="";
+  BUILDINGS.forEach(function(b){
+    var count=roomItemCount(b);
+    var t=document.createElement("div"); t.className="btile"+(count>0?" primary":"");
+    t.innerHTML='<div class="bnum">'+b+'</div><div class="bcount"><b>'+count+'</b> item'+(count===1?'':'s')+'</div>';
+    t.onclick=function(){ openRoom(b); };
+    grid.appendChild(t);
+  });
+}
+function openRoom(bldg){
+  activeRoom=bldg;
+  $("roomGrid").classList.add("hidden");
+  $("roomDetail").classList.remove("hidden");
+  var rows=onHand(bldg).filter(function(x){ return x.qty>0; });
+  rows.sort(function(a,b){ return a.item.localeCompare(b.item); });
+  $("roomTitle").textContent="SBN"+bldg+" Storage";
+  $("roomSub").textContent="Under the stairs · by IW room · "+rows.length+" item"+(rows.length===1?'':'s')+" on hand";
+  $("roomCount").textContent=rows.length;
+  var wrap=$("roomOnHand");
+  if(!rows.length){ wrap.innerHTML='<div class="empty">Nothing on hand in this room yet.</div>'; return; }
+  wrap.innerHTML="";
+  rows.forEach(function(x){
+    var d=document.createElement("div"); d.className="onhandrow";
+    var info=document.createElement("div"); info.style.flex="1"; info.style.paddingRight="8px";
+    info.textContent=short(x.item,46);
+    var q=document.createElement("div"); q.className="q"; q.textContent=x.qty;
+    d.appendChild(info); d.appendChild(q); wrap.appendChild(d);
+  });
+}
+function closeRoom(){
+  $("roomDetail").classList.add("hidden");
+  $("roomGrid").classList.remove("hidden");
+  renderRooms();
+}
+function startIntake(bldg){
+  activeRoom=bldg;
+  // reset the intake flow
+  batch=[]; cur={item:null,qty:1,photo:null};
+  $("itemDetail").classList.add("hidden");
+  $("photoPreview").innerHTML=""; var pi=$("photoInput"); if(pi) pi.value="";
+  searchEl.value=""; resultsEl.classList.add("hidden");
+  $("intakeTitle").textContent="Intake → SBN"+bldg;
+  renderBatch(); refreshAddBtn();
+  switchView("intake");
+}
+$("roomBack").onclick=closeRoom;
+$("intakeBack").onclick=function(){ switchView("rooms"); openRoom(activeRoom); };
+$("roomIntakeBtn").onclick=function(){ startIntake(activeRoom); };
 
 /* cart interactions */
 $("cartBar").onclick=openCart;
@@ -907,7 +1027,8 @@ else showAlias();
 accessGate();
 
 /* ---------- boot ---------- */
-renderBatch(); renderShop(); renderLedger(); updateSync();
+renderRooms(); renderBatch(); renderShop(); renderLedger(); updateSync();
+switchView("rooms");   // Rooms is the home / default view
 
 /* Environment gate: only run service worker / cloud sync on the real deployed
    host. The preview sandbox blocks SW + CDN + Firebase and surfaces a phantom
