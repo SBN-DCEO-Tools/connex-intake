@@ -1,6 +1,6 @@
 {
-  "name": "Connex Intake Console",
-  "short_name": "Connex",
+  "name": "Watt's in Stock",
+  "short_name": "Watt's",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
